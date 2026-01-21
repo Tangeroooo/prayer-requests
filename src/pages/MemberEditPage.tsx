@@ -9,7 +9,7 @@ import {
   updatePrayerRequest,
   deletePrayerRequest,
 } from '@/lib/api'
-import { uploadPhoto } from '@/lib/supabase'
+import { uploadPhoto, deletePhoto } from '@/lib/supabase'
 import type { MemberRole, PrayerRequest } from '@/types'
 import Layout from '@/components/Layout'
 import PhotoUploader from '@/components/PhotoUploader'
@@ -25,7 +25,8 @@ export default function MemberEditPage() {
   const [role, setRole] = useState<MemberRole>('sub_leader')
   const [smallGroupId, setSmallGroupId] = useState('')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
-  const [photoPosition, setPhotoPosition] = useState({ x: 50, y: 50 })
+  const [photoPosition, setPhotoPosition] = useState<{ x: number; y: number; zoom?: number }>({ x: 50, y: 50, zoom: 1 })
+  const [photoRemoved, setPhotoRemoved] = useState(false) // 기존 사진 삭제 요청
   const [prayerRequests, setPrayerRequests] = useState<PrayerRequest[]>([])
   const [newRequest, setNewRequest] = useState('')
   const [isSaving, setIsSaving] = useState(false)
@@ -46,8 +47,9 @@ export default function MemberEditPage() {
       setName(member.name)
       setRole(member.role)
       setSmallGroupId(member.small_group_id)
-      setPhotoPosition(member.photo_position || { x: 50, y: 50 })
+      setPhotoPosition(member.photo_position || { x: 50, y: 50, zoom: 1 })
       setPrayerRequests(member.prayer_requests || [])
+      setPhotoRemoved(false) // 초기화
     }
   }, [member])
 
@@ -56,9 +58,22 @@ export default function MemberEditPage() {
       if (!id) return
 
       let photoUrl = member?.photo_url
+      const oldPhotoUrl = member?.photo_url
 
-      // Upload new photo if selected
-      if (photoFile) {
+      // 사진 삭제 요청 시
+      if (photoRemoved && !photoFile) {
+        // Storage에서 기존 사진 삭제
+        if (oldPhotoUrl && !oldPhotoUrl.startsWith('http')) {
+          await deletePhoto(oldPhotoUrl)
+        }
+        photoUrl = null
+      }
+      // 새 사진 업로드 시
+      else if (photoFile) {
+        // 기존 사진이 있으면 먼저 삭제
+        if (oldPhotoUrl && !oldPhotoUrl.startsWith('http')) {
+          await deletePhoto(oldPhotoUrl)
+        }
         const uploadedPath = await uploadPhoto(photoFile, id)
         if (uploadedPath) {
           photoUrl = uploadedPath
@@ -181,6 +196,7 @@ export default function MemberEditPage() {
             photoPosition={photoPosition}
             onPhotoChange={setPhotoFile}
             onPositionChange={setPhotoPosition}
+            onPhotoRemove={() => setPhotoRemoved(true)}
           />
 
           <div>

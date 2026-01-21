@@ -21,6 +21,7 @@ export interface Member {
 export interface PhotoPosition {
   x: number
   y: number
+  zoom?: number // 1 = 100%, 2 = 200%
 }
 
 export interface PrayerRequest {

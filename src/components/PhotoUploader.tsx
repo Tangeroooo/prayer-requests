@@ -3,9 +3,10 @@ import { useSignedUrl } from '@/hooks/useSignedUrl'
 
 interface PhotoUploaderProps {
   currentPhotoUrl?: string | null
-  photoPosition: { x: number; y: number }
+  photoPosition: { x: number; y: number; zoom?: number }
   onPhotoChange: (file: File | null) => void
-  onPositionChange: (position: { x: number; y: number }) => void
+  onPositionChange: (position: { x: number; y: number; zoom?: number }) => void
+  onPhotoRemove?: () => void // 기존 사진 삭제 시 호출
 }
 
 export default function PhotoUploader({
@@ -13,14 +14,17 @@ export default function PhotoUploader({
   photoPosition,
   onPhotoChange,
   onPositionChange,
+  onPhotoRemove,
 }: PhotoUploaderProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [isAdjusting, setIsAdjusting] = useState(false)
+  const [isRemoved, setIsRemoved] = useState(false) // 삭제 상태
   const containerRef = useRef<HTMLDivElement>(null)
 
   const { signedUrl } = useSignedUrl(currentPhotoUrl)
-  const displayUrl = previewUrl || signedUrl
+  const displayUrl = isRemoved ? null : (previewUrl || signedUrl)
+  const currentZoom = photoPosition.zoom ?? 1
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -85,7 +89,14 @@ export default function PhotoUploader({
 
   const handleRemove = () => {
     setPreviewUrl(null)
+    setIsRemoved(true)
     onPhotoChange(null)
+    onPhotoRemove?.() // 기존 사진 삭제 알림
+  }
+
+  const handleZoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const zoom = parseFloat(e.target.value)
+    onPositionChange({ ...photoPosition, zoom })
   }
 
   return (
@@ -104,7 +115,7 @@ export default function PhotoUploader({
             style={{
               backgroundImage: `url(${displayUrl})`,
               backgroundPosition: `${photoPosition.x}% ${photoPosition.y}%`,
-              backgroundSize: 'cover',
+              backgroundSize: `${currentZoom * 100}%`,
             }}
           >
             {/* Position indicator */}
@@ -121,6 +132,22 @@ export default function PhotoUploader({
             <span className="material-icons-outlined text-sm">touch_app</span>
             클릭하거나 드래그하여 사진 위치를 조정하세요
           </p>
+
+          {/* Zoom slider */}
+          <div className="flex items-center gap-3">
+            <span className="material-icons-outlined text-sm text-gray-400">zoom_out</span>
+            <input
+              type="range"
+              min="1"
+              max="2"
+              step="0.1"
+              value={currentZoom}
+              onChange={handleZoomChange}
+              className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+            />
+            <span className="material-icons-outlined text-sm text-gray-400">zoom_in</span>
+            <span className="text-xs text-gray-500 w-12">{Math.round(currentZoom * 100)}%</span>
+          </div>
 
           <button
             type="button"

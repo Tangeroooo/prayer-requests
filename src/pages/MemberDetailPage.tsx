@@ -74,7 +74,7 @@ export default function MemberDetailPage() {
               style={{
                 backgroundImage: `url(${photoUrl})`,
                 backgroundPosition: `${member.photo_position?.x || 50}% ${member.photo_position?.y || 50}%`,
-                backgroundSize: 'cover',
+                backgroundSize: `${(member.photo_position?.zoom ?? 1) * 100}%`,
               }}
             />
           ) : (

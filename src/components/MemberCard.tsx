@@ -43,7 +43,7 @@ export default function MemberCard({ member, isRecent, showGroup = false, index 
               style={{
                 backgroundImage: `url(${photoUrl})`,
                 backgroundPosition: `${member.photo_position?.x || 50}% ${member.photo_position?.y || 50}%`,
-                backgroundSize: 'cover',
+                backgroundSize: `${(member.photo_position?.zoom ?? 1) * 100}%`,
               }}
             />
           ) : (
@@ -81,10 +81,10 @@ export default function MemberCard({ member, isRecent, showGroup = false, index 
             </p>
           )}
           {member.prayer_requests && member.prayer_requests.length > 1 && (
-            <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
-              <span className="material-icons-outlined text-sm">add</span>
-              {member.prayer_requests.length - 1}개 더보기
-            </p>
+            <div className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-medium">
+              <span className="material-icons text-sm">format_list_bulleted</span>
+              총 {member.prayer_requests.length}개 기도제목
+            </div>
           )}
         </div>
 
