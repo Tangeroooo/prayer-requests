@@ -99,7 +99,7 @@ export default function MemberEditPage() {
 
     try {
       const created = await createPrayerRequest(id, newRequest.trim())
-      setPrayerRequests([created, ...prayerRequests])
+      setPrayerRequests([...prayerRequests, created])
       setNewRequest('')
       queryClient.invalidateQueries({ queryKey: ['members'] })
     } catch (error) {
@@ -231,6 +231,7 @@ export default function MemberEditPage() {
               onChange={(e) => setRole(e.target.value as MemberRole)}
               className="input"
             >
+              <option value="pastor">교역자</option>
               <option value="leader">다락방장</option>
               <option value="sub_leader">순장</option>
             </select>

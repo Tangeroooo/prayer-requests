@@ -9,7 +9,7 @@ export interface Member {
   id: string
   small_group_id: string
   name: string
-  role: 'leader' | 'sub_leader'
+  role: 'pastor' | 'leader' | 'sub_leader'
   photo_url: string | null
   photo_position: PhotoPosition
   created_at: string
@@ -37,9 +37,17 @@ export interface Settings {
   value: string
 }
 
-export type MemberRole = 'leader' | 'sub_leader'
+export type MemberRole = 'pastor' | 'leader' | 'sub_leader'
 
 export const ROLE_LABELS: Record<MemberRole, string> = {
+  pastor: '교역자',
   leader: '다락방장',
   sub_leader: '순장',
+}
+
+// 정렬용 역할 우선순위 (낮을수록 상위)
+export const ROLE_PRIORITY: Record<MemberRole, number> = {
+  pastor: 0,
+  leader: 1,
+  sub_leader: 2,
 }

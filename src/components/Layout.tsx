@@ -79,7 +79,10 @@ export default function Layout({ children }: LayoutProps) {
             <span className="material-icons-outlined text-xl text-gray-400">church</span>
             <span className="text-gray-600 font-medium">13th Friend 리더십 기도제목</span>
           </div>
-          <p className="text-sm text-gray-400">멘토님 감사합니다</p>
+          <p className="text-sm text-gray-400 flex items-center justify-center gap-1">
+            멘토님 감사합니다
+            <span className="material-icons text-red-400 text-sm">favorite</span>
+          </p>
         </div>
       </footer>
     </div>

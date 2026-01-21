@@ -67,7 +67,15 @@ export const getMembers = async (): Promise<Member[]> => {
     .order('updated_at', { ascending: false })
 
   if (error) throw error
-  return data || []
+
+  // 기도제목을 생성순으로 정렬 (먼저 넣은 것이 1번)
+  return (data || []).map(member => ({
+    ...member,
+    prayer_requests: member.prayer_requests?.sort(
+      (a: { created_at: string }, b: { created_at: string }) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+  }))
 }
 
 export const getMember = async (id: string): Promise<Member | null> => {
@@ -85,6 +93,15 @@ export const getMember = async (id: string): Promise<Member | null> => {
     if (error.code === 'PGRST116') return null
     throw error
   }
+
+  // 기도제목을 생성순으로 정렬 (먼저 넣은 것이 1번)
+  if (data?.prayer_requests) {
+    data.prayer_requests.sort(
+      (a: { created_at: string }, b: { created_at: string }) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+  }
+
   return data
 }
 
@@ -194,5 +211,13 @@ export const getRecentlyUpdatedMembers = async (): Promise<Member[]> => {
     .order('updated_at', { ascending: false })
 
   if (error) throw error
-  return data || []
+
+  // 기도제목을 생성순으로 정렬 (먼저 넣은 것이 1번)
+  return (data || []).map(member => ({
+    ...member,
+    prayer_requests: member.prayer_requests?.sort(
+      (a: { created_at: string }, b: { created_at: string }) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+  }))
 }

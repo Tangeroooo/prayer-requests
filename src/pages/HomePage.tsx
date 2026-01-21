@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getMembers, getSmallGroups } from '@/lib/api'
 import type { Member } from '@/types'
+import { ROLE_PRIORITY } from '@/types'
 import Layout from '@/components/Layout'
 import MemberCard from '@/components/MemberCard'
 import LoadingSpinner from '@/components/LoadingSpinner'
@@ -37,13 +38,11 @@ export default function HomePage() {
     return new Set(recentMembers.map((m) => m.id))
   }, [recentMembers])
 
-  // 멤버 정렬 함수: 다락방장 먼저, 그 다음 순장 가나다순
+  // 멤버 정렬 함수: 교역자 > 다락방장 > 순장, 같은 역할이면 가나다순
   const sortMembers = (members: Member[]) => {
     return [...members].sort((a, b) => {
-      // 다락방장(leader)이 먼저
-      if (a.role === 'leader' && b.role !== 'leader') return -1
-      if (a.role !== 'leader' && b.role === 'leader') return 1
-      // 같은 역할이면 가나다순
+      const priorityDiff = ROLE_PRIORITY[a.role] - ROLE_PRIORITY[b.role]
+      if (priorityDiff !== 0) return priorityDiff
       return a.name.localeCompare(b.name, 'ko')
     })
   }

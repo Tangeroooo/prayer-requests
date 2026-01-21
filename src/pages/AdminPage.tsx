@@ -10,68 +10,42 @@ import {
   createMember,
   deleteMember,
 } from '@/lib/api'
-import type { SmallGroup, MemberRole } from '@/types'
-import { ROLE_LABELS } from '@/types'
+import type { SmallGroup, Member, MemberRole } from '@/types'
+import { ROLE_LABELS, ROLE_PRIORITY } from '@/types'
 import Layout from '@/components/Layout'
 import LoadingSpinner from '@/components/LoadingSpinner'
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'groups' | 'members'>('groups')
-
-  return (
-    <Layout>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">관리</h1>
-
-      {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg mb-6">
-        <button
-          onClick={() => setActiveTab('groups')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'groups'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          다락방 관리
-        </button>
-        <button
-          onClick={() => setActiveTab('members')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'members'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          멤버 관리
-        </button>
-      </div>
-
-      {activeTab === 'groups' ? <SmallGroupsManager /> : <MembersManager />}
-    </Layout>
-  )
-}
-
-// Small Groups Manager
-function SmallGroupsManager() {
   const queryClient = useQueryClient()
-  const [newGroupName, setNewGroupName] = useState('')
   const [editingGroup, setEditingGroup] = useState<SmallGroup | null>(null)
-  const [editName, setEditName] = useState('')
+  const [editGroupName, setEditGroupName] = useState('')
+  const [addingMemberToGroup, setAddingMemberToGroup] = useState<string | null>(null)
+  const [newMemberName, setNewMemberName] = useState('')
+  const [newMemberRole, setNewMemberRole] = useState<MemberRole>('sub_leader')
+  const [showAddGroup, setShowAddGroup] = useState(false)
+  const [newGroupName, setNewGroupName] = useState('')
 
-  const { data: groups, isLoading } = useQuery({
+  const { data: groups, isLoading: groupsLoading } = useQuery({
     queryKey: ['smallGroups'],
     queryFn: getSmallGroups,
   })
 
-  const createMutation = useMutation({
+  const { data: members, isLoading: membersLoading } = useQuery({
+    queryKey: ['members'],
+    queryFn: getMembers,
+  })
+
+  // Group mutations
+  const createGroupMutation = useMutation({
     mutationFn: createSmallGroup,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['smallGroups'] })
       setNewGroupName('')
+      setShowAddGroup(false)
     },
   })
 
-  const updateMutation = useMutation({
+  const updateGroupMutation = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) => updateSmallGroup(id, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['smallGroups'] })
@@ -79,7 +53,7 @@ function SmallGroupsManager() {
     },
   })
 
-  const deleteMutation = useMutation({
+  const deleteGroupMutation = useMutation({
     mutationFn: deleteSmallGroup,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['smallGroups'] })
@@ -87,75 +61,116 @@ function SmallGroupsManager() {
     },
   })
 
-  const handleCreate = () => {
+  // Member mutations
+  const createMemberMutation = useMutation({
+    mutationFn: createMember,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['members'] })
+      setAddingMemberToGroup(null)
+      setNewMemberName('')
+      setNewMemberRole('sub_leader')
+    },
+  })
+
+  const deleteMemberMutation = useMutation({
+    mutationFn: deleteMember,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['members'] })
+    },
+  })
+
+  // Group handlers
+  const handleCreateGroup = () => {
     if (newGroupName.trim()) {
-      createMutation.mutate(newGroupName.trim())
+      createGroupMutation.mutate(newGroupName.trim())
     }
   }
 
-  const handleStartEdit = (group: SmallGroup) => {
+  const handleStartEditGroup = (group: SmallGroup) => {
     setEditingGroup(group)
-    setEditName(group.name)
+    setEditGroupName(group.name)
   }
 
-  const handleSaveEdit = () => {
-    if (editingGroup && editName.trim()) {
-      updateMutation.mutate({ id: editingGroup.id, name: editName.trim() })
+  const handleSaveEditGroup = () => {
+    if (editingGroup && editGroupName.trim()) {
+      updateGroupMutation.mutate({ id: editingGroup.id, name: editGroupName.trim() })
     }
   }
 
-  const handleDelete = (group: SmallGroup) => {
+  const handleDeleteGroup = (group: SmallGroup) => {
     if (confirm(`"${group.name}" 다락방을 삭제하시겠습니까?\n소속된 모든 멤버도 함께 삭제됩니다.`)) {
-      deleteMutation.mutate(group.id)
+      deleteGroupMutation.mutate(group.id)
     }
   }
 
-  if (isLoading) return <LoadingSpinner />
+  // Member handlers
+  const handleStartAddMember = (groupId: string) => {
+    setAddingMemberToGroup(groupId)
+    setNewMemberName('')
+    setNewMemberRole('sub_leader')
+  }
+
+  const handleCreateMember = () => {
+    if (newMemberName.trim() && addingMemberToGroup) {
+      createMemberMutation.mutate({
+        name: newMemberName.trim(),
+        role: newMemberRole,
+        small_group_id: addingMemberToGroup,
+      })
+    }
+  }
+
+  const handleDeleteMember = (member: Member) => {
+    if (confirm(`"${member.name}" 멤버를 삭제하시겠습니까?`)) {
+      deleteMemberMutation.mutate(member.id)
+    }
+  }
+
+  // Group members by small group
+  const getMembersByGroup = (groupId: string) => {
+    if (!members) return []
+    return members
+      .filter(m => m.small_group_id === groupId)
+      .sort((a, b) => {
+        // Sort by role priority, then by name
+        const priorityDiff = ROLE_PRIORITY[a.role] - ROLE_PRIORITY[b.role]
+        if (priorityDiff !== 0) return priorityDiff
+        return a.name.localeCompare(b.name, 'ko')
+      })
+  }
+
+  const sortedGroups = groups?.slice().sort((a, b) => a.name.localeCompare(b.name, 'ko')) || []
+
+  if (groupsLoading || membersLoading) {
+    return (
+      <Layout>
+        <LoadingSpinner />
+      </Layout>
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Add new group */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">새 다락방 추가</h2>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newGroupName}
-            onChange={(e) => setNewGroupName(e.target.value)}
-            placeholder="다락방 이름"
-            className="input flex-1"
-            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-          />
-          <button
-            onClick={handleCreate}
-            disabled={!newGroupName.trim() || createMutation.isPending}
-            className="btn-primary"
-          >
-            추가
-          </button>
-        </div>
-      </div>
+    <Layout>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">관리</h1>
 
-      {/* Groups list */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">다락방 목록</h2>
-        {groups && groups.length > 0 ? (
-          <div className="space-y-2">
-            {groups.map((group) => (
-              <div
-                key={group.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-gray-50"
-              >
+      {/* Groups with members */}
+      <div className="space-y-6">
+        {sortedGroups.length > 0 ? (
+          sortedGroups.map((group) => (
+            <div key={group.id} className="card">
+              {/* Group header */}
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
                 {editingGroup?.id === group.id ? (
                   <div className="flex-1 flex gap-2">
                     <input
                       type="text"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
+                      value={editGroupName}
+                      onChange={(e) => setEditGroupName(e.target.value)}
                       className="input flex-1"
                       autoFocus
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveEditGroup()}
                     />
-                    <button onClick={handleSaveEdit} className="btn-primary text-sm">
+                    <button onClick={handleSaveEditGroup} className="btn-primary text-sm">
                       저장
                     </button>
                     <button
@@ -167,203 +182,168 @@ function SmallGroupsManager() {
                   </div>
                 ) : (
                   <>
-                    <span className="font-medium text-gray-900">{group.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="material-icons-outlined text-gray-400">groups</span>
+                      <h2 className="text-lg font-semibold text-gray-900">{group.name}</h2>
+                      <span className="text-sm text-gray-400">
+                        ({getMembersByGroup(group.id).length}명)
+                      </span>
+                    </div>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleStartEdit(group)}
-                        className="text-sm text-gray-500 hover:text-gray-700"
+                        onClick={() => handleStartEditGroup(group)}
+                        className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
                       >
+                        <span className="material-icons-outlined text-sm">edit</span>
                         수정
                       </button>
                       <button
-                        onClick={() => handleDelete(group)}
-                        className="text-sm text-red-500 hover:text-red-700"
+                        onClick={() => handleDeleteGroup(group)}
+                        className="text-sm text-red-500 hover:text-red-700 flex items-center gap-1"
                       >
+                        <span className="material-icons-outlined text-sm">delete</span>
                         삭제
                       </button>
                     </div>
                   </>
                 )}
               </div>
-            ))}
-          </div>
+
+              {/* Members list */}
+              <div className="space-y-2">
+                {getMembersByGroup(group.id).map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-gray-50"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="material-icons-outlined text-gray-400 text-lg">person</span>
+                      <span className="font-medium text-gray-900">{member.name}</span>
+                      <span className="chip text-xs py-0.5 px-2">
+                        {ROLE_LABELS[member.role]}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Link
+                        to={`/member/${member.id}/edit`}
+                        className="text-sm text-blue-600 hover:text-blue-700"
+                      >
+                        편집
+                      </Link>
+                      <button
+                        onClick={() => handleDeleteMember(member)}
+                        className="text-sm text-red-500 hover:text-red-700"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {getMembersByGroup(group.id).length === 0 && !addingMemberToGroup && (
+                  <p className="text-center text-gray-400 py-4 text-sm">
+                    아직 멤버가 없습니다
+                  </p>
+                )}
+
+                {/* Add member form */}
+                {addingMemberToGroup === group.id ? (
+                  <div className="p-4 rounded-lg bg-blue-50 border border-blue-100 space-y-3">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newMemberName}
+                        onChange={(e) => setNewMemberName(e.target.value)}
+                        placeholder="이름"
+                        className="input flex-1"
+                        autoFocus
+                        onKeyDown={(e) => e.key === 'Enter' && handleCreateMember()}
+                      />
+                      <select
+                        value={newMemberRole}
+                        onChange={(e) => setNewMemberRole(e.target.value as MemberRole)}
+                        className="input w-28"
+                      >
+                        <option value="pastor">교역자</option>
+                        <option value="leader">다락방장</option>
+                        <option value="sub_leader">순장</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleCreateMember}
+                        disabled={!newMemberName.trim() || createMemberMutation.isPending}
+                        className="btn-primary text-sm"
+                      >
+                        추가
+                      </button>
+                      <button
+                        onClick={() => setAddingMemberToGroup(null)}
+                        className="btn-secondary text-sm"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleStartAddMember(group.id)}
+                    className="w-full p-3 rounded-lg border-2 border-dashed border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors flex items-center justify-center gap-1 text-sm"
+                  >
+                    <span className="material-icons-outlined text-lg">person_add</span>
+                    새 멤버 추가
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
         ) : (
-          <p className="text-center text-gray-500 py-4">등록된 다락방이 없습니다</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// Members Manager
-function MembersManager() {
-  const queryClient = useQueryClient()
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [newMemberName, setNewMemberName] = useState('')
-  const [newMemberRole, setNewMemberRole] = useState<MemberRole>('sub_leader')
-  const [newMemberGroupId, setNewMemberGroupId] = useState('')
-
-  const { data: groups } = useQuery({
-    queryKey: ['smallGroups'],
-    queryFn: getSmallGroups,
-  })
-
-  const { data: members, isLoading } = useQuery({
-    queryKey: ['members'],
-    queryFn: getMembers,
-  })
-
-  const createMutation = useMutation({
-    mutationFn: createMember,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['members'] })
-      setShowAddForm(false)
-      setNewMemberName('')
-      setNewMemberRole('sub_leader')
-      setNewMemberGroupId('')
-    },
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteMember,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['members'] })
-    },
-  })
-
-  const handleCreate = () => {
-    if (newMemberName.trim() && newMemberGroupId) {
-      createMutation.mutate({
-        name: newMemberName.trim(),
-        role: newMemberRole,
-        small_group_id: newMemberGroupId,
-      })
-    }
-  }
-
-  const handleDelete = (member: { id: string; name: string }) => {
-    if (confirm(`"${member.name}" 멤버를 삭제하시겠습니까?`)) {
-      deleteMutation.mutate(member.id)
-    }
-  }
-
-  if (isLoading) return <LoadingSpinner />
-
-  return (
-    <div className="space-y-6">
-      {/* Add new member */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">새 멤버 추가</h2>
-          {!showAddForm && (
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="btn-secondary text-sm"
-              disabled={!groups?.length}
-            >
-              + 멤버 추가
-            </button>
-          )}
-        </div>
-
-        {!groups?.length && (
-          <p className="text-sm text-gray-500">먼저 다락방을 추가해주세요.</p>
+          <div className="card text-center py-8">
+            <span className="material-icons-outlined text-5xl text-gray-300 mb-3">folder_off</span>
+            <p className="text-gray-500">등록된 다락방이 없습니다</p>
+            <p className="text-sm text-gray-400 mt-1">아래 버튼을 눌러 다락방을 추가하세요</p>
+          </div>
         )}
 
-        {showAddForm && groups && groups.length > 0 && (
-          <div className="space-y-4">
-            <div>
-              <label className="label">이름</label>
+        {/* Add new group */}
+        {showAddGroup ? (
+          <div className="card">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <span className="material-icons-outlined text-gray-400">add_circle</span>
+              새 다락방 추가
+            </h2>
+            <div className="flex gap-2">
               <input
                 type="text"
-                value={newMemberName}
-                onChange={(e) => setNewMemberName(e.target.value)}
-                placeholder="이름"
-                className="input"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                placeholder="다락방 이름"
+                className="input flex-1"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
               />
-            </div>
-            <div>
-              <label className="label">다락방</label>
-              <select
-                value={newMemberGroupId}
-                onChange={(e) => setNewMemberGroupId(e.target.value)}
-                className="input"
-              >
-                <option value="">선택하세요</option>
-                {groups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label">역할</label>
-              <select
-                value={newMemberRole}
-                onChange={(e) => setNewMemberRole(e.target.value as MemberRole)}
-                className="input"
-              >
-                <option value="leader">다락방장</option>
-                <option value="sub_leader">순장</option>
-              </select>
-            </div>
-            <div className="flex gap-2">
               <button
-                onClick={handleCreate}
-                disabled={!newMemberName.trim() || !newMemberGroupId || createMutation.isPending}
+                onClick={handleCreateGroup}
+                disabled={!newGroupName.trim() || createGroupMutation.isPending}
                 className="btn-primary"
               >
                 추가
               </button>
-              <button onClick={() => setShowAddForm(false)} className="btn-secondary">
+              <button onClick={() => setShowAddGroup(false)} className="btn-secondary">
                 취소
               </button>
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Members list */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">멤버 목록</h2>
-        {members && members.length > 0 ? (
-          <div className="space-y-2">
-            {members.map((member) => (
-              <div
-                key={member.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-gray-50"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{member.name}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
-                      {ROLE_LABELS[member.role]}
-                    </span>
-                  </div>
-                  <span className="text-sm text-gray-500">{member.small_group?.name}</span>
-                </div>
-                <div className="flex gap-2">
-                  <Link
-                    to={`/member/${member.id}/edit`}
-                    className="text-sm text-blue-600 hover:text-blue-700"
-                  >
-                    편집
-                  </Link>
-                  <button
-                    onClick={() => handleDelete(member)}
-                    className="text-sm text-red-500 hover:text-red-700"
-                  >
-                    삭제
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
         ) : (
-          <p className="text-center text-gray-500 py-4">등록된 멤버가 없습니다</p>
+          <button
+            onClick={() => setShowAddGroup(true)}
+            className="w-full p-4 rounded-2xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors flex items-center justify-center gap-2"
+          >
+            <span className="material-icons-outlined">add</span>
+            새 그룹 추가하기
+          </button>
         )}
       </div>
-    </div>
+    </Layout>
   )
 }

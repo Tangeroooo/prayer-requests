@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useSignedUrl } from '@/hooks/useSignedUrl'
 
 interface PhotoUploaderProps {
@@ -191,8 +192,8 @@ export default function PhotoUploader({
         </div>
       )}
 
-      {/* Edit Modal */}
-      {isModalOpen && displayUrl && (
+      {/* Edit Modal - Portal to body */}
+      {isModalOpen && displayUrl && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl animate-fade-in-up">
             <div className="flex items-center justify-between mb-4">
@@ -272,7 +273,8 @@ export default function PhotoUploader({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
