@@ -77,21 +77,45 @@ export default function PhotoUploader({
     setIsModalOpen(true)
   }
 
-  const handleModalPositionMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault()
+  // 드래그로 이미지 이동 (마우스 + 터치 지원)
+  const handleDragStart = (clientX: number, clientY: number) => {
     const container = modalContainerRef.current
-    if (!container) return
+    if (!container) return null
 
     const rect = container.getBoundingClientRect()
-
-    const updatePosition = (clientX: number, clientY: number) => {
-      const x = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100))
-      const y = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100))
-      setTempPosition(prev => ({ ...prev, x: Math.round(x), y: Math.round(y) }))
+    return {
+      startX: clientX,
+      startY: clientY,
+      startPosX: tempPosition.x,
+      startPosY: tempPosition.y,
+      rect
     }
+  }
+
+  const handleDragMove = (
+    clientX: number,
+    clientY: number,
+    dragState: { startX: number; startY: number; startPosX: number; startPosY: number; rect: DOMRect }
+  ) => {
+    const deltaX = clientX - dragState.startX
+    const deltaY = clientY - dragState.startY
+
+    // 드래그 방향과 이미지 이동 방향을 반대로 (자연스러운 팬 동작)
+    const sensitivity = 100 / dragState.rect.width * 2
+    const newX = Math.max(0, Math.min(100, dragState.startPosX - deltaX * sensitivity))
+    const newY = Math.max(0, Math.min(100, dragState.startPosY - deltaY * sensitivity))
+
+    setTempPosition(prev => ({ ...prev, x: Math.round(newX), y: Math.round(newY) }))
+  }
+
+  // 마우스 이벤트
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const dragState = handleDragStart(e.clientX, e.clientY)
+    if (!dragState) return
 
     const handleMouseMove = (e: MouseEvent) => {
-      updatePosition(e.clientX, e.clientY)
+      handleDragMove(e.clientX, e.clientY, dragState)
     }
 
     const handleMouseUp = () => {
@@ -101,8 +125,38 @@ export default function PhotoUploader({
 
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
+  }
 
-    updatePosition(e.clientX, e.clientY)
+  // 터치 이벤트
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return
+    const touch = e.touches[0]
+    const dragState = handleDragStart(touch.clientX, touch.clientY)
+    if (!dragState) return
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      e.preventDefault()
+      const touch = e.touches[0]
+      handleDragMove(touch.clientX, touch.clientY, dragState)
+    }
+
+    const handleTouchEnd = () => {
+      document.removeEventListener('touchmove', handleTouchMove)
+      document.removeEventListener('touchend', handleTouchEnd)
+    }
+
+    document.addEventListener('touchmove', handleTouchMove, { passive: false })
+    document.addEventListener('touchend', handleTouchEnd)
+  }
+
+  // 화살표 버튼으로 미세 조정
+  const movePosition = (dx: number, dy: number) => {
+    setTempPosition(prev => ({
+      ...prev,
+      x: Math.max(0, Math.min(100, prev.x + dx)),
+      y: Math.max(0, Math.min(100, prev.y + dy))
+    }))
   }
 
   const handleTempZoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -209,8 +263,9 @@ export default function PhotoUploader({
             {/* Large preview area */}
             <div
               ref={modalContainerRef}
-              className="relative w-full aspect-square rounded-2xl overflow-hidden cursor-crosshair border-2 border-gray-200 mb-4"
-              onMouseDown={handleModalPositionMouseDown}
+              className="relative w-full aspect-square rounded-2xl overflow-hidden cursor-grab active:cursor-grabbing border-2 border-gray-200 mb-4 touch-none select-none"
+              onMouseDown={handleMouseDown}
+              onTouchStart={handleTouchStart}
               style={{
                 backgroundImage: `url(${displayUrl})`,
                 backgroundPosition: `${tempPosition.x}% ${tempPosition.y}%`,
@@ -234,10 +289,49 @@ export default function PhotoUploader({
               </div>
             </div>
 
-            <p className="text-xs text-gray-500 mb-4 flex items-center gap-1">
-              <span className="material-icons-outlined text-sm">touch_app</span>
-              클릭하거나 드래그하여 사진 위치를 조정하세요
+            <p className="text-xs text-gray-500 mb-3 flex items-center gap-1">
+              <span className="material-icons-outlined text-sm">pan_tool</span>
+              드래그하여 사진을 이동하세요
             </p>
+
+            {/* Arrow buttons for fine adjustment */}
+            <div className="flex justify-center mb-4">
+              <div className="inline-flex flex-col items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => movePosition(0, -5)}
+                  className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+                >
+                  <span className="material-icons text-gray-600">keyboard_arrow_up</span>
+                </button>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => movePosition(-5, 0)}
+                    className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+                  >
+                    <span className="material-icons text-gray-600">keyboard_arrow_left</span>
+                  </button>
+                  <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center">
+                    <span className="material-icons text-gray-300 text-sm">fiber_manual_record</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => movePosition(5, 0)}
+                    className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+                  >
+                    <span className="material-icons text-gray-600">keyboard_arrow_right</span>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => movePosition(0, 5)}
+                  className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+                >
+                  <span className="material-icons text-gray-600">keyboard_arrow_down</span>
+                </button>
+              </div>
+            </div>
 
             {/* Zoom slider */}
             <div className="flex items-center gap-3 mb-6">
