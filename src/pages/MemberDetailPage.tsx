@@ -86,15 +86,15 @@ export default function MemberDetailPage() {
 
           {/* Info */}
           <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <h1 className="text-2xl font-bold text-gray-900">{member.name}</h1>
-              <span className="text-sm px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 inline-flex items-center gap-1">
-                <span className="material-icons text-sm">{ROLE_ICONS[member.role]}</span>
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <h1 className="text-3xl font-bold text-gray-900">{member.name}</h1>
+              <span className="text-base px-3 py-1 rounded-full bg-gray-100 text-gray-600 inline-flex items-center gap-1">
+                <span className="material-icons text-base">{ROLE_ICONS[member.role]}</span>
                 {ROLE_LABELS[member.role]}
               </span>
             </div>
-            <p className="text-gray-500 mb-4">{member.small_group?.name}</p>
-            <p className="text-sm text-gray-400">
+            <p className="text-lg text-gray-500 mb-4">{member.small_group?.name}</p>
+            <p className="text-base text-gray-400">
               마지막 업데이트: {formatDate(member.updated_at)}
             </p>
           </div>
@@ -103,18 +103,18 @@ export default function MemberDetailPage() {
 
       {/* Prayer Requests */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">기도제목</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">기도제목</h2>
         {member.prayer_requests && member.prayer_requests.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {member.prayer_requests.map((request, index) => (
               <div key={request.id} className="card">
-                <div className="flex gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-sm font-medium text-gray-500">
+                <div className="flex gap-4">
+                  <span className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-base font-medium text-gray-500">
                     {index + 1}
                   </span>
                   <div className="flex-1">
-                    <p className="text-gray-700 whitespace-pre-wrap">{request.content}</p>
-                    <p className="text-xs text-gray-400 mt-2">
+                    <p className="text-lg text-gray-700 whitespace-pre-wrap leading-relaxed">{request.content}</p>
+                    <p className="text-sm text-gray-400 mt-3">
                       {formatDate(request.updated_at)}
                     </p>
                   </div>
@@ -124,7 +124,7 @@ export default function MemberDetailPage() {
           </div>
         ) : (
           <div className="card text-center py-8">
-            <p className="text-gray-500">등록된 기도제목이 없습니다</p>
+            <p className="text-lg text-gray-500">등록된 기도제목이 없습니다</p>
           </div>
         )}
       </div>
