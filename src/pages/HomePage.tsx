@@ -7,8 +7,11 @@ import Layout from '@/components/Layout'
 import MemberCard from '@/components/MemberCard'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { SparklesIcon, DocumentIcon } from '@/components/Icons'
+import { useScrollRestoration } from '@/hooks/useScrollRestoration'
 
 export default function HomePage() {
+  // 스크롤 위치 복원
+  useScrollRestoration()
   const { data: members, isLoading: membersLoading } = useQuery({
     queryKey: ['members'],
     queryFn: getMembers,

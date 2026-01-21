@@ -3,6 +3,7 @@ import type { Member } from '@/types'
 import { ROLE_LABELS, ROLE_ICONS } from '@/types'
 import { useSignedUrl } from '@/hooks/useSignedUrl'
 import { useAuth } from '@/contexts/AuthContext'
+import { saveScrollPosition } from '@/hooks/useScrollRestoration'
 
 interface MemberCardProps {
   member: Member
@@ -33,6 +34,7 @@ export default function MemberCard({ member, isRecent, showGroup = false, index 
     <Link
       to={isAdmin ? `/member/${member.id}/edit` : `/member/${member.id}`}
       className={`card group block animate-fade-in-up stagger-${Math.min(index + 1, 6)}`}
+      onClick={saveScrollPosition}
     >
       <div className="flex gap-4">
         {/* Photo */}
