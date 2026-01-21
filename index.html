@@ -22,8 +22,22 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Outlined" rel="stylesheet">
-    <script type="module" crossorigin src="/prayer-requests/assets/index-r-HQQOJw.js"></script>
-    <link rel="stylesheet" crossorigin href="/prayer-requests/assets/index-C6SWdPl2.css">
+
+    <!-- SPA 라우팅을 위한 404 리다이렉트 처리 -->
+    <script type="text/javascript">
+      (function(l) {
+        if (l.search[1] === '/' ) {
+          var decoded = l.search.slice(1).split('&').map(function(s) {
+            return s.replace(/~and~/g, '&')
+          }).join('?');
+          window.history.replaceState(null, null,
+              l.pathname.slice(0, -1) + decoded + l.hash
+          );
+        }
+      }(window.location))
+    </script>
+    <script type="module" crossorigin src="/prayer-requests/assets/index-Ba4kHjPD.js"></script>
+    <link rel="stylesheet" crossorigin href="/prayer-requests/assets/index-CbdtCGHr.css">
   </head>
   <body>
     <div id="root"></div>
