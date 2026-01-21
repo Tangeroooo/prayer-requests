@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { useSignedUrl } from '@/hooks/useSignedUrl'
 
 interface PhotoUploaderProps {
@@ -18,9 +18,10 @@ export default function PhotoUploader({
 }: PhotoUploaderProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
-  const [isAdjusting, setIsAdjusting] = useState(false)
-  const [isRemoved, setIsRemoved] = useState(false) // 삭제 상태
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [isRemoved, setIsRemoved] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [tempPosition, setTempPosition] = useState({ x: 50, y: 50, zoom: 1 })
+  const modalContainerRef = useRef<HTMLDivElement>(null)
 
   const { signedUrl } = useSignedUrl(currentPhotoUrl)
   const displayUrl = isRemoved ? null : (previewUrl || signedUrl)
@@ -31,7 +32,11 @@ export default function PhotoUploader({
     if (file) {
       const url = URL.createObjectURL(file)
       setPreviewUrl(url)
+      setIsRemoved(false)
       onPhotoChange(file)
+      // 새 파일 업로드 시 모달 열기
+      setTempPosition({ x: 50, y: 50, zoom: 1 })
+      setIsModalOpen(true)
     }
   }
 
@@ -51,16 +56,29 @@ export default function PhotoUploader({
     if (file && file.type.startsWith('image/')) {
       const url = URL.createObjectURL(file)
       setPreviewUrl(url)
+      setIsRemoved(false)
       onPhotoChange(file)
+      // 새 파일 업로드 시 모달 열기
+      setTempPosition({ x: 50, y: 50, zoom: 1 })
+      setIsModalOpen(true)
     }
   }
 
-  const handlePositionMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!displayUrl) return
-    e.preventDefault()
-    setIsAdjusting(true)
+  const handleRemove = () => {
+    setPreviewUrl(null)
+    setIsRemoved(true)
+    onPhotoChange(null)
+    onPhotoRemove?.()
+  }
 
-    const container = containerRef.current
+  const openEditModal = () => {
+    setTempPosition({ ...photoPosition, zoom: photoPosition.zoom ?? 1 })
+    setIsModalOpen(true)
+  }
+
+  const handleModalPositionMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const container = modalContainerRef.current
     if (!container) return
 
     const rect = container.getBoundingClientRect()
@@ -68,7 +86,7 @@ export default function PhotoUploader({
     const updatePosition = (clientX: number, clientY: number) => {
       const x = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100))
       const y = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100))
-      onPositionChange({ x: Math.round(x), y: Math.round(y) })
+      setTempPosition(prev => ({ ...prev, x: Math.round(x), y: Math.round(y) }))
     }
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -76,7 +94,6 @@ export default function PhotoUploader({
     }
 
     const handleMouseUp = () => {
-      setIsAdjusting(false)
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
@@ -85,18 +102,20 @@ export default function PhotoUploader({
     document.addEventListener('mouseup', handleMouseUp)
 
     updatePosition(e.clientX, e.clientY)
-  }, [displayUrl, onPositionChange])
-
-  const handleRemove = () => {
-    setPreviewUrl(null)
-    setIsRemoved(true)
-    onPhotoChange(null)
-    onPhotoRemove?.() // 기존 사진 삭제 알림
   }
 
-  const handleZoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTempZoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const zoom = parseFloat(e.target.value)
-    onPositionChange({ ...photoPosition, zoom })
+    setTempPosition(prev => ({ ...prev, zoom }))
+  }
+
+  const handleModalConfirm = () => {
+    onPositionChange(tempPosition)
+    setIsModalOpen(false)
+  }
+
+  const handleModalCancel = () => {
+    setIsModalOpen(false)
   }
 
   return (
@@ -105,49 +124,30 @@ export default function PhotoUploader({
 
       {displayUrl ? (
         <div className="space-y-3">
-          {/* Preview with position adjustment */}
+          {/* Thumbnail preview */}
           <div
-            ref={containerRef}
-            className={`relative w-32 h-32 rounded-2xl overflow-hidden cursor-crosshair border-2 ${
-              isAdjusting ? 'border-blue-400' : 'border-gray-200'
-            }`}
-            onMouseDown={handlePositionMouseDown}
+            className="relative w-32 h-32 rounded-2xl overflow-hidden border-2 border-gray-200 cursor-pointer hover:border-blue-400 transition-colors"
+            onClick={openEditModal}
             style={{
               backgroundImage: `url(${displayUrl})`,
               backgroundPosition: `${photoPosition.x}% ${photoPosition.y}%`,
               backgroundSize: `${currentZoom * 100}%`,
+              backgroundRepeat: 'no-repeat',
             }}
           >
-            {/* Position indicator */}
-            <div
-              className="absolute w-3 h-3 bg-white border-2 border-blue-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none shadow-md"
-              style={{
-                left: `${photoPosition.x}%`,
-                top: `${photoPosition.y}%`,
-              }}
-            />
+            <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-center justify-center">
+              <span className="material-icons text-white opacity-0 hover:opacity-100 text-2xl drop-shadow-lg">edit</span>
+            </div>
           </div>
 
-          <p className="text-xs text-gray-500 flex items-center gap-1">
-            <span className="material-icons-outlined text-sm">touch_app</span>
-            클릭하거나 드래그하여 사진 위치를 조정하세요
-          </p>
-
-          {/* Zoom slider */}
-          <div className="flex items-center gap-3">
-            <span className="material-icons-outlined text-sm text-gray-400">zoom_out</span>
-            <input
-              type="range"
-              min="1"
-              max="2"
-              step="0.1"
-              value={currentZoom}
-              onChange={handleZoomChange}
-              className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
-            />
-            <span className="material-icons-outlined text-sm text-gray-400">zoom_in</span>
-            <span className="text-xs text-gray-500 w-12">{Math.round(currentZoom * 100)}%</span>
-          </div>
+          <button
+            type="button"
+            onClick={openEditModal}
+            className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+          >
+            <span className="material-icons-outlined text-sm">crop</span>
+            위치/확대 조정
+          </button>
 
           <button
             type="button"
@@ -188,6 +188,90 @@ export default function PhotoUploader({
           <p className="text-xs text-gray-400 mt-3">
             최대 800px로 자동 리사이즈됩니다
           </p>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {isModalOpen && displayUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl animate-fade-in-up">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">사진 조정</h3>
+              <button
+                onClick={handleModalCancel}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+
+            {/* Large preview area */}
+            <div
+              ref={modalContainerRef}
+              className="relative w-full aspect-square rounded-2xl overflow-hidden cursor-crosshair border-2 border-gray-200 mb-4"
+              onMouseDown={handleModalPositionMouseDown}
+              style={{
+                backgroundImage: `url(${displayUrl})`,
+                backgroundPosition: `${tempPosition.x}% ${tempPosition.y}%`,
+                backgroundSize: `${tempPosition.zoom * 100}%`,
+                backgroundRepeat: 'no-repeat',
+                backgroundColor: '#f3f4f6',
+              }}
+            >
+              {/* Position indicator */}
+              <div
+                className="absolute w-4 h-4 bg-white border-2 border-blue-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none shadow-lg"
+                style={{
+                  left: `${tempPosition.x}%`,
+                  top: `${tempPosition.y}%`,
+                }}
+              />
+              {/* Center guide */}
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute top-1/2 left-0 right-0 h-px bg-white/30" />
+                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/30" />
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-500 mb-4 flex items-center gap-1">
+              <span className="material-icons-outlined text-sm">touch_app</span>
+              클릭하거나 드래그하여 사진 위치를 조정하세요
+            </p>
+
+            {/* Zoom slider */}
+            <div className="flex items-center gap-3 mb-6">
+              <span className="material-icons-outlined text-sm text-gray-400">zoom_out</span>
+              <input
+                type="range"
+                min="1"
+                max="2.5"
+                step="0.1"
+                value={tempPosition.zoom}
+                onChange={handleTempZoomChange}
+                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              />
+              <span className="material-icons-outlined text-sm text-gray-400">zoom_in</span>
+              <span className="text-sm text-gray-600 w-14 text-right font-medium">
+                {Math.round(tempPosition.zoom * 100)}%
+              </span>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleModalCancel}
+                className="btn-secondary flex-1"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleModalConfirm}
+                className="btn-primary flex-1"
+              >
+                적용
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

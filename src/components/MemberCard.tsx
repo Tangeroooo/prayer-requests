@@ -39,11 +39,12 @@ export default function MemberCard({ member, isRecent, showGroup = false, index 
         <div className="flex-shrink-0">
           {photoUrl ? (
             <div
-              className="w-24 h-24 rounded-2xl overflow-hidden"
+              className="w-24 h-24 rounded-2xl overflow-hidden bg-gray-100"
               style={{
                 backgroundImage: `url(${photoUrl})`,
                 backgroundPosition: `${member.photo_position?.x || 50}% ${member.photo_position?.y || 50}%`,
                 backgroundSize: `${(member.photo_position?.zoom ?? 1) * 100}%`,
+                backgroundRepeat: 'no-repeat',
               }}
             />
           ) : (

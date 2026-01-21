@@ -70,11 +70,12 @@ export default function MemberDetailPage() {
           {/* Photo */}
           {photoUrl ? (
             <div
-              className="w-56 h-56 sm:w-64 sm:h-64 rounded-3xl flex-shrink-0 overflow-hidden"
+              className="w-56 h-56 sm:w-64 sm:h-64 rounded-3xl flex-shrink-0 overflow-hidden bg-gray-100"
               style={{
                 backgroundImage: `url(${photoUrl})`,
                 backgroundPosition: `${member.photo_position?.x || 50}% ${member.photo_position?.y || 50}%`,
                 backgroundSize: `${(member.photo_position?.zoom ?? 1) * 100}%`,
+                backgroundRepeat: 'no-repeat',
               }}
             />
           ) : (

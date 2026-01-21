@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>13th Friend 리더십 기도제목</title>
+    <script type="text/javascript">
+      // SPA 라우팅을 위한 리다이렉트
+      // GitHub Pages는 SPA 라우팅을 지원하지 않으므로
+      // 404 페이지에서 메인 페이지로 리다이렉트하면서 경로 정보를 전달
+      var pathSegmentsToKeep = 1; // /prayer-requests/ 유지
+      var l = window.location;
+      l.replace(
+        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
+        l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+        (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+        l.hash
+      );
+    </script>
+  </head>
+  <body>
+  </body>
+</html>
