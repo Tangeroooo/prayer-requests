@@ -50,7 +50,7 @@ export default function HomePage() {
 
   // 다락방별로 그룹화 (모든 멤버, 정렬 적용)
   const membersByGroup = useMemo(() => {
-    if (!smallGroups || !members) return new Map()
+    if (!smallGroups || !members) return new Map<string, Member[]>()
 
     const grouped = new Map<string, Member[]>()
 
