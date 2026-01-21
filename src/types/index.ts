@@ -45,6 +45,13 @@ export const ROLE_LABELS: Record<MemberRole, string> = {
   sub_leader: '순장',
 }
 
+// 역할별 아이콘 (Material Icons)
+export const ROLE_ICONS: Record<MemberRole, string> = {
+  pastor: 'star',
+  leader: 'groups',
+  sub_leader: 'person',
+}
+
 // 정렬용 역할 우선순위 (낮을수록 상위)
 export const ROLE_PRIORITY: Record<MemberRole, number> = {
   pastor: 0,

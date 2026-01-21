@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { Member } from '@/types'
-import { ROLE_LABELS } from '@/types'
+import { ROLE_LABELS, ROLE_ICONS } from '@/types'
 import { useSignedUrl } from '@/hooks/useSignedUrl'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -60,7 +60,8 @@ export default function MemberCard({ member, isRecent, showGroup = false, index 
             <h3 className="text-lg font-bold text-gray-800 group-hover:text-gray-600 transition-colors">
               {member.name}
             </h3>
-            <span className="chip text-xs py-1 px-2.5">
+            <span className="chip text-xs py-1 px-2.5 inline-flex items-center gap-1">
+              <span className="material-icons text-xs leading-none">{ROLE_ICONS[member.role]}</span>
               {ROLE_LABELS[member.role]}
             </span>
             {isRecent && (

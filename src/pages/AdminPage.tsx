@@ -11,7 +11,7 @@ import {
   deleteMember,
 } from '@/lib/api'
 import type { SmallGroup, Member, MemberRole } from '@/types'
-import { ROLE_LABELS, ROLE_PRIORITY } from '@/types'
+import { ROLE_LABELS, ROLE_ICONS, ROLE_PRIORITY } from '@/types'
 import Layout from '@/components/Layout'
 import LoadingSpinner from '@/components/LoadingSpinner'
 
@@ -219,7 +219,8 @@ export default function AdminPage() {
                     <div className="flex items-center gap-2">
                       <span className="material-icons-outlined text-gray-400 text-lg">person</span>
                       <span className="font-medium text-gray-900">{member.name}</span>
-                      <span className="chip text-xs py-0.5 px-2">
+                      <span className="chip text-xs py-0.5 px-2 inline-flex items-center gap-1">
+                        <span className="material-icons text-xs leading-none">{ROLE_ICONS[member.role]}</span>
                         {ROLE_LABELS[member.role]}
                       </span>
                     </div>

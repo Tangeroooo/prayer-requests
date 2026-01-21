@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getMember } from '@/lib/api'
-import { ROLE_LABELS } from '@/types'
+import { ROLE_LABELS, ROLE_ICONS } from '@/types'
 import { useSignedUrl } from '@/hooks/useSignedUrl'
 import Layout from '@/components/Layout'
 import LoadingSpinner from '@/components/LoadingSpinner'
@@ -88,7 +88,8 @@ export default function MemberDetailPage() {
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
               <h1 className="text-2xl font-bold text-gray-900">{member.name}</h1>
-              <span className="text-sm px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+              <span className="text-sm px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 inline-flex items-center gap-1">
+                <span className="material-icons text-sm">{ROLE_ICONS[member.role]}</span>
                 {ROLE_LABELS[member.role]}
               </span>
             </div>
