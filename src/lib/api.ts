@@ -108,7 +108,7 @@ export const getMember = async (id: string): Promise<Member | null> => {
 export const createMember = async (member: {
   small_group_id: string
   name: string
-  role: 'leader' | 'sub_leader'
+  role: 'pastor' | 'leader' | 'sub_leader'
   photo_url?: string
   photo_position?: { x: number; y: number }
 }): Promise<Member> => {
