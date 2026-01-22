@@ -80,7 +80,7 @@ export default function Layout({ children }: LayoutProps) {
             <span className="text-gray-600 font-medium">13th Friend 리더십 기도제목</span>
           </div>
           <p className="text-sm text-gray-400 flex items-center justify-center gap-1">
-            멘토님 감사합니다
+            항상 기도로 중보해주셔서 감사합니다
             <span className="material-icons text-red-400 text-sm">favorite</span>
           </p>
         </div>

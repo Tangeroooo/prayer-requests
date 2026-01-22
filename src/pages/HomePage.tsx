@@ -84,7 +84,7 @@ export default function HomePage() {
     <Layout>
       {/* Recent Updates Section */}
       {recentMembers.length > 0 && (
-        <section className="mb-8 p-5 bg-blue-50/50 rounded-2xl border border-blue-100">
+        <section className="mb-6 p-2.5 sm:p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <SparklesIcon className="text-xl text-blue-500" />
             최근 업데이트
@@ -104,7 +104,7 @@ export default function HomePage() {
       {membersByGroup.size > 0 ? (
         <div className="space-y-6">
           {Array.from(membersByGroup.entries()).map(([groupName, groupMembers]) => (
-            <section key={groupName} className="p-5 bg-white rounded-2xl border border-gray-200">
+            <section key={groupName} className="p-2.5 sm:p-4 bg-white rounded-2xl border border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <span className="material-icons-outlined text-xl text-gray-400">groups</span>
                 {groupName}
