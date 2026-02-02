@@ -122,13 +122,24 @@ export const createMember = async (member: {
   return data
 }
 
+// 멤버의 updated_at만 갱신 (기도제목 변경 시 최근 업데이트 반영용)
+const touchMember = async (memberId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('members')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', memberId)
+
+  if (error) throw error
+}
+
 export const updateMember = async (
   id: string,
   updates: Partial<Omit<Member, 'id' | 'created_at' | 'updated_at'>>
 ): Promise<Member> => {
+  const payload = { ...updates, updated_at: new Date().toISOString() }
   const { data, error } = await supabase
     .from('members')
-    .update(updates)
+    .update(payload)
     .eq('id', id)
     .select()
     .single()
@@ -171,6 +182,7 @@ export const createPrayerRequest = async (memberId: string, content: string): Pr
     .single()
 
   if (error) throw error
+  await touchMember(memberId)
   return data
 }
 
@@ -183,16 +195,20 @@ export const updatePrayerRequest = async (id: string, content: string): Promise<
     .single()
 
   if (error) throw error
+  if (data?.member_id) await touchMember(data.member_id)
   return data
 }
 
 export const deletePrayerRequest = async (id: string): Promise<void> => {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('prayer_requests')
     .delete()
     .eq('id', id)
+    .select('member_id')
+    .single()
 
   if (error) throw error
+  if (data?.member_id) await touchMember(data.member_id)
 }
 
 // 최근 2주 업데이트된 멤버 가져오기
