@@ -1,25 +1,27 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { verifyAdminPassword } from '@/lib/api'
-import { useAuth } from '@/contexts/AuthContext'
+import { getSharedAuthErrorMessage, signInWithSharedPassword } from '@/lib/auth'
 import { LockIcon } from '@/components/Icons'
 
 export default function AdminLoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const { setAdminMode } = useAuth()
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const navigate = useNavigate()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
-    const isValid = verifyAdminPassword(password)
-    if (isValid) {
-      setAdminMode(true)
+    setIsSubmitting(true)
+
+    try {
+      await signInWithSharedPassword('admin', password)
       navigate('/admin')
-    } else {
-      setError('관리자 비밀번호가 올바르지 않습니다')
+    } catch (err) {
+      setError(getSharedAuthErrorMessage(err, '관리자 비밀번호가 올바르지 않습니다'))
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -61,11 +63,11 @@ export default function AdminLoginPage() {
           <div className="space-y-3">
             <button
               type="submit"
-              disabled={!password}
+              disabled={!password || isSubmitting}
               className="btn-primary w-full"
             >
               <span className="material-icons-outlined text-lg">login</span>
-              로그인
+              {isSubmitting ? '확인 중...' : '로그인'}
             </button>
             <button
               type="button"

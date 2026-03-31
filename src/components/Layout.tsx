@@ -8,7 +8,7 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const { isAdmin, logout, setAdminMode } = useAuth()
+  const { isAdmin, logout } = useAuth()
   const location = useLocation()
 
   return (
@@ -21,31 +21,22 @@ export default function Layout({ children }: LayoutProps) {
               <div className="w-9 h-9 rounded-lg icon-bg flex items-center justify-center">
                 <PrayingHandsIcon className="text-xl icon-color" />
               </div>
-              <span className="font-bold text-gray-900">13th Friend 리더십 기도제목</span>
+              <span className="font-bold text-gray-900">13TH CROSS 리더십 기도제목</span>
             </Link>
 
             <nav className="flex items-center gap-1">
               {isAdmin ? (
-                <>
-                  <Link
-                    to="/admin"
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      location.pathname === '/admin'
-                        ? 'bg-gray-100 text-gray-900'
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="material-icons-outlined text-lg">settings</span>
-                    <span className="hidden sm:inline">관리</span>
-                  </Link>
-                  <button
-                    onClick={() => setAdminMode(false)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                  >
-                    <span className="material-icons-outlined text-lg">logout</span>
-                    <span className="hidden sm:inline">관리자 종료</span>
-                  </button>
-                </>
+                <Link
+                  to="/admin"
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname === '/admin'
+                      ? 'bg-gray-100 text-gray-900'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="material-icons-outlined text-lg">settings</span>
+                  <span className="hidden sm:inline">관리</span>
+                </Link>
               ) : (
                 <Link
                   to="/admin-login"
@@ -56,7 +47,9 @@ export default function Layout({ children }: LayoutProps) {
                 </Link>
               )}
               <button
-                onClick={logout}
+                onClick={() => {
+                  void logout()
+                }}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors"
               >
                 <span className="material-icons-outlined text-lg">power_settings_new</span>
@@ -77,7 +70,7 @@ export default function Layout({ children }: LayoutProps) {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <span className="material-icons-outlined text-xl text-gray-400">church</span>
-            <span className="text-gray-600 font-medium">13th Friend 리더십 기도제목</span>
+            <span className="text-gray-600 font-medium">13TH CROSS 리더십 기도제목</span>
           </div>
           <p className="text-sm text-gray-400 flex items-center justify-center gap-1">
             항상 기도로 중보해주셔서 감사합니다

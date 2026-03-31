@@ -1,22 +1,27 @@
 import { useState } from 'react'
-import { verifySitePassword } from '@/lib/api'
-import { useAuth } from '@/contexts/AuthContext'
+import { useNavigate } from 'react-router-dom'
+import { getSharedAuthErrorMessage, signInWithSharedPassword } from '@/lib/auth'
 import { PrayingHandsIcon } from '@/components/Icons'
 
 export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const { login } = useAuth()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const navigate = useNavigate()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
-    const isValid = verifySitePassword(password)
-    if (isValid) {
-      login()
-    } else {
-      setError('비밀번호가 올바르지 않습니다')
+    setIsSubmitting(true)
+
+    try {
+      await signInWithSharedPassword('site', password)
+      navigate('/')
+    } catch (err) {
+      setError(getSharedAuthErrorMessage(err, '비밀번호가 올바르지 않습니다'))
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -27,7 +32,7 @@ export default function LoginPage() {
           <div className="w-20 h-20 mx-auto mb-6 rounded-2xl icon-bg flex items-center justify-center">
             <PrayingHandsIcon className="text-4xl icon-color" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">13th Friend 리더십 기도제목</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">13TH CROSS 리더십 기도제목</h1>
         </div>
 
         <form onSubmit={handleSubmit} className="card">
@@ -56,11 +61,11 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={!password}
+            disabled={!password || isSubmitting}
             className="btn-primary w-full"
           >
             <span className="material-icons-outlined text-lg">login</span>
-            접속하기
+            {isSubmitting ? '확인 중...' : '접속하기'}
           </button>
         </form>
       </div>

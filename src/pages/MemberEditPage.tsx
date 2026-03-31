@@ -1,20 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getMember,
-  getSmallGroups,
+  getMinistryUnits,
   updateMember,
   createPrayerRequest,
   updatePrayerRequest,
   deletePrayerRequest,
 } from '@/lib/api'
-import { uploadPhoto, deletePhoto } from '@/lib/supabase'
-import type { MemberRole, PrayerRequest } from '@/types'
+import { deletePhoto, uploadPhoto } from '@/lib/supabase'
+import { formatMinistryUnitPath, sortMinistryUnits } from '@/lib/hierarchy'
+import type { MemberRole, MemberType, PrayerRequest } from '@/types'
+import { MEMBER_ROLE_LABELS, MEMBER_TYPE_LABELS } from '@/types'
 import Layout from '@/components/Layout'
 import PhotoUploader from '@/components/PhotoUploader'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { ExclamationIcon, ChevronLeftIcon } from '@/components/Icons'
+
+const usesSelectableMemberRole = (memberType: MemberType) => memberType === 'regular'
+
+const normalizeSelectableMemberRole = (memberRole: MemberRole) =>
+  memberRole === 'leader' || memberRole === 'sub_leader' ? memberRole : 'sub_leader'
 
 export default function MemberEditPage() {
   const { id } = useParams<{ id: string }>()
@@ -22,11 +29,16 @@ export default function MemberEditPage() {
   const queryClient = useQueryClient()
 
   const [name, setName] = useState('')
-  const [role, setRole] = useState<MemberRole>('sub_leader')
-  const [smallGroupId, setSmallGroupId] = useState('')
+  const [memberType, setMemberType] = useState<MemberType>('regular')
+  const [memberRole, setMemberRole] = useState<MemberRole>('sub_leader')
+  const [ministryUnitId, setMinistryUnitId] = useState('')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
-  const [photoPosition, setPhotoPosition] = useState<{ x: number; y: number; zoom?: number }>({ x: 50, y: 50, zoom: 1 })
-  const [photoRemoved, setPhotoRemoved] = useState(false) // 기존 사진 삭제 요청
+  const [photoPosition, setPhotoPosition] = useState<{ x: number; y: number; zoom?: number }>({
+    x: 50,
+    y: 50,
+    zoom: 1,
+  })
+  const [photoRemoved, setPhotoRemoved] = useState(false)
   const [prayerRequests, setPrayerRequests] = useState<PrayerRequest[]>([])
   const [newRequest, setNewRequest] = useState('')
   const [isSaving, setIsSaving] = useState(false)
@@ -37,21 +49,34 @@ export default function MemberEditPage() {
     enabled: !!id,
   })
 
-  const { data: smallGroups, isLoading: groupsLoading } = useQuery({
-    queryKey: ['smallGroups'],
-    queryFn: getSmallGroups,
+  const { data: ministryUnits, isLoading: unitsLoading } = useQuery({
+    queryKey: ['ministryUnits'],
+    queryFn: getMinistryUnits,
   })
 
   useEffect(() => {
     if (member) {
       setName(member.name)
-      setRole(member.role)
-      setSmallGroupId(member.small_group_id)
+      setMemberType(member.member_type)
+      setMemberRole(
+        member.member_type === 'regular'
+          ? normalizeSelectableMemberRole(member.member_role)
+          : member.member_role
+      )
+      setMinistryUnitId(member.ministry_unit_id)
       setPhotoPosition(member.photo_position || { x: 50, y: 50, zoom: 1 })
       setPrayerRequests(member.prayer_requests || [])
-      setPhotoRemoved(false) // 초기화
+      setPhotoRemoved(false)
     }
   }, [member])
+
+  const sortedUnits = useMemo(() => {
+    if (!ministryUnits) return []
+
+    return sortMinistryUnits(ministryUnits).sort((a, b) =>
+      formatMinistryUnitPath(a).localeCompare(formatMinistryUnitPath(b), 'ko')
+    )
+  }, [ministryUnits])
 
   const updateMemberMutation = useMutation({
     mutationFn: async () => {
@@ -60,17 +85,12 @@ export default function MemberEditPage() {
       let photoUrl = member?.photo_url
       const oldPhotoUrl = member?.photo_url
 
-      // 사진 삭제 요청 시
       if (photoRemoved && !photoFile) {
-        // Storage에서 기존 사진 삭제
         if (oldPhotoUrl && !oldPhotoUrl.startsWith('http')) {
           await deletePhoto(oldPhotoUrl)
         }
         photoUrl = null
-      }
-      // 새 사진 업로드 시
-      else if (photoFile) {
-        // 기존 사진이 있으면 먼저 삭제
+      } else if (photoFile) {
         if (oldPhotoUrl && !oldPhotoUrl.startsWith('http')) {
           await deletePhoto(oldPhotoUrl)
         }
@@ -82,8 +102,11 @@ export default function MemberEditPage() {
 
       await updateMember(id, {
         name,
-        role,
-        small_group_id: smallGroupId,
+        member_type: memberType,
+        member_role: usesSelectableMemberRole(memberType)
+          ? normalizeSelectableMemberRole(memberRole)
+          : 'member',
+        ministry_unit_id: ministryUnitId,
         photo_url: photoUrl,
         photo_position: photoPosition,
       })
@@ -111,8 +134,8 @@ export default function MemberEditPage() {
     try {
       await updatePrayerRequest(requestId, content)
       setPrayerRequests(
-        prayerRequests.map((r) =>
-          r.id === requestId ? { ...r, content } : r
+        prayerRequests.map((request) =>
+          request.id === requestId ? { ...request, content } : request
         )
       )
       queryClient.invalidateQueries({ queryKey: ['members'] })
@@ -126,7 +149,7 @@ export default function MemberEditPage() {
 
     try {
       await deletePrayerRequest(requestId)
-      setPrayerRequests(prayerRequests.filter((r) => r.id !== requestId))
+      setPrayerRequests(prayerRequests.filter((request) => request.id !== requestId))
       queryClient.invalidateQueries({ queryKey: ['members'] })
     } catch (error) {
       console.error('Failed to delete prayer request:', error)
@@ -135,6 +158,7 @@ export default function MemberEditPage() {
 
   const handleSave = async () => {
     setIsSaving(true)
+
     try {
       await updateMemberMutation.mutateAsync()
       navigate('/')
@@ -146,7 +170,7 @@ export default function MemberEditPage() {
     }
   }
 
-  if (memberLoading || groupsLoading) {
+  if (memberLoading || unitsLoading) {
     return (
       <Layout>
         <LoadingSpinner />
@@ -186,7 +210,6 @@ export default function MemberEditPage() {
 
       <h1 className="text-2xl font-bold text-gray-900 mb-6">멤버 정보 수정</h1>
 
-      {/* Basic Info Card */}
       <div className="card mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">기본 정보</h2>
 
@@ -210,40 +233,66 @@ export default function MemberEditPage() {
           </div>
 
           <div>
-            <label className="label">다락방</label>
+            <label className="label">소속 단위</label>
             <select
-              value={smallGroupId}
-              onChange={(e) => setSmallGroupId(e.target.value)}
+              value={ministryUnitId}
+              onChange={(e) => setMinistryUnitId(e.target.value)}
               className="input"
             >
-              {smallGroups?.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
+              {sortedUnits.map((unit) => (
+                <option key={unit.id} value={unit.id}>
+                  {formatMinistryUnitPath(unit)}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="label">역할</label>
+            <label className="label">멤버 종류</label>
             <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as MemberRole)}
+              value={memberType}
+              onChange={(e) => {
+                const nextType = e.target.value as MemberType
+                setMemberType(nextType)
+                if (usesSelectableMemberRole(nextType)) {
+                  setMemberRole((current) => normalizeSelectableMemberRole(current))
+                } else {
+                  setMemberRole('member')
+                }
+              }}
               className="input"
             >
-              <option value="pastor">교역자</option>
-              <option value="leader">다락방장</option>
-              <option value="sub_leader">순장</option>
+              <option value="regular">{MEMBER_TYPE_LABELS.regular}</option>
+              <option value="pastor">{MEMBER_TYPE_LABELS.pastor}</option>
+              <option value="mc">{MEMBER_TYPE_LABELS.mc}</option>
             </select>
+          </div>
+
+          <div>
+            <label className="label">직책</label>
+            {usesSelectableMemberRole(memberType) ? (
+              <select
+                value={memberRole}
+                onChange={(e) =>
+                  setMemberRole(normalizeSelectableMemberRole(e.target.value as MemberRole))
+                }
+                className="input"
+              >
+                <option value="leader">{MEMBER_ROLE_LABELS.leader}</option>
+                <option value="sub_leader">{MEMBER_ROLE_LABELS.sub_leader}</option>
+              </select>
+            ) : (
+              <div className="input flex items-center text-gray-500">
+                직책은 자동으로 멤버로 저장됩니다
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Prayer Requests Card */}
       <div className="card mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">기도제목</h2>
 
-        {/* Add new prayer request */}
         <div className="mb-6">
           <textarea
             value={newRequest}
@@ -261,7 +310,6 @@ export default function MemberEditPage() {
           </button>
         </div>
 
-        {/* Existing prayer requests */}
         <div className="space-y-4">
           {prayerRequests.map((request, index) => (
             <PrayerRequestItem
@@ -281,11 +329,10 @@ export default function MemberEditPage() {
         )}
       </div>
 
-      {/* Actions */}
       <div className="flex gap-3">
         <button
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || !name.trim() || !ministryUnitId}
           className="btn-primary flex-1"
         >
           {isSaving ? '저장 중...' : '저장하기'}
@@ -298,7 +345,6 @@ export default function MemberEditPage() {
   )
 }
 
-// Prayer Request Item Component
 function PrayerRequestItem({
   request,
   index,

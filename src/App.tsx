@@ -6,9 +6,24 @@ import HomePage from '@/pages/HomePage'
 import MemberDetailPage from '@/pages/MemberDetailPage'
 import MemberEditPage from '@/pages/MemberEditPage'
 import AdminPage from '@/pages/AdminPage'
+import LoadingSpinner from '@/components/LoadingSpinner'
+
+function AuthLoadingScreen() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="w-full max-w-sm card">
+        <LoadingSpinner />
+      </div>
+    </div>
+  )
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isLoading } = useAuth()
+
+  if (isLoading) {
+    return <AuthLoadingScreen />
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
@@ -18,34 +33,46 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isAdmin } = useAuth()
+  const { isAuthenticated, isAdmin, isLoading } = useAuth()
+
+  if (isLoading) {
+    return <AuthLoadingScreen />
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
 
   if (!isAdmin) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/admin-login" replace />
   }
 
   return <>{children}</>
 }
 
 function AppRoutes() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isAdmin, isLoading } = useAuth()
 
   return (
     <Routes>
       <Route
         path="/login"
-        element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />}
+        element={
+          isLoading ? <AuthLoadingScreen /> : isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />
+        }
       />
       <Route
         path="/admin-login"
         element={
-          <ProtectedRoute>
-            <AdminLoginPage />
-          </ProtectedRoute>
+          isLoading ? (
+            <AuthLoadingScreen />
+          ) : isAdmin ? (
+            <Navigate to="/admin" replace />
+          ) : (
+            <ProtectedRoute>
+              <AdminLoginPage />
+            </ProtectedRoute>
+          )
         }
       />
       <Route

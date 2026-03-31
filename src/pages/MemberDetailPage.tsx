@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getMember } from '@/lib/api'
-import { ROLE_LABELS, ROLE_ICONS } from '@/types'
+import { formatMinistryUnitPath, getMemberBadges } from '@/lib/hierarchy'
 import { useSignedUrl } from '@/hooks/useSignedUrl'
 import Layout from '@/components/Layout'
 import LoadingSpinner from '@/components/LoadingSpinner'
@@ -12,15 +12,16 @@ export default function MemberDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false)
 
-  // ESC 키로 모달 닫기
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setIsPhotoModalOpen(false)
     }
+
     if (isPhotoModalOpen) {
       document.addEventListener('keydown', handleEsc)
       document.body.style.overflow = 'hidden'
     }
+
     return () => {
       document.removeEventListener('keydown', handleEsc)
       document.body.style.overflow = ''
@@ -33,7 +34,6 @@ export default function MemberDetailPage() {
     enabled: !!id,
   })
 
-  // 훅은 항상 조건부 return 전에 호출해야 함
   const { signedUrl: photoUrl } = useSignedUrl(member?.photo_url)
 
   if (isLoading) {
@@ -62,13 +62,15 @@ export default function MemberDetailPage() {
     )
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('ko-KR', {
+  const memberBadges = getMemberBadges(member)
+  const hierarchyLabel = formatMinistryUnitPath(member.ministry_unit)
+
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString('ko-KR', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
     })
-  }
 
   return (
     <Layout>
@@ -84,7 +86,6 @@ export default function MemberDetailPage() {
 
       <div className="card mb-4 sm:mb-6">
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
-          {/* Photo */}
           {photoUrl ? (
             <button
               type="button"
@@ -104,18 +105,22 @@ export default function MemberDetailPage() {
             </div>
           )}
 
-          {/* Info */}
           <div className="flex-1 text-center sm:text-left">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{member.name}</h1>
             <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-              <span className="text-sm sm:text-base px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-gray-100 text-gray-600 inline-flex items-center gap-1">
-                <span className="material-icons text-sm sm:text-base">{ROLE_ICONS[member.role]}</span>
-                {ROLE_LABELS[member.role]}
-              </span>
-              {member.small_group?.name && (
+              {memberBadges.map((badge) => (
+                <span
+                  key={badge.key}
+                  className="text-sm sm:text-base px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-gray-100 text-gray-600 inline-flex items-center gap-1"
+                >
+                  <span className="material-icons text-sm sm:text-base">{badge.icon}</span>
+                  {badge.label}
+                </span>
+              ))}
+              {hierarchyLabel && (
                 <span className="text-sm sm:text-base px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-gray-100 text-gray-600 inline-flex items-center gap-1">
-                  <span className="material-icons text-sm sm:text-base">groups</span>
-                  {member.small_group.name}
+                  <span className="material-icons text-sm sm:text-base">account_tree</span>
+                  {hierarchyLabel}
                 </span>
               )}
             </div>
@@ -123,7 +128,6 @@ export default function MemberDetailPage() {
         </div>
       </div>
 
-      {/* Prayer Requests */}
       <div>
         <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 sm:mb-4">기도제목</h2>
         {member.prayer_requests && member.prayer_requests.length > 0 ? (
@@ -151,7 +155,6 @@ export default function MemberDetailPage() {
         )}
       </div>
 
-      {/* Photo Modal */}
       {isPhotoModalOpen && photoUrl && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"

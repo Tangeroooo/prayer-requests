@@ -1,91 +1,147 @@
 import { supabase } from './supabase'
-import type { SmallGroup, Member, PrayerRequest } from '@/types'
+import type {
+  Group,
+  Member,
+  MemberRole,
+  MemberType,
+  MinistryUnit,
+  MinistryUnitType,
+  PhotoPosition,
+  PrayerRequest,
+} from '@/types'
 
-// Settings - 환경 변수에서 비밀번호 확인
-export const verifySitePassword = (password: string): boolean => {
-  const envPassword = import.meta.env.VITE_SITE_PASSWORD
-  return password === envPassword
-}
+const MEMBER_SELECT = `
+  *,
+  ministry_unit:ministry_units(
+    *,
+    group:groups(*)
+  ),
+  prayer_requests(*)
+`
 
-export const verifyAdminPassword = (password: string): boolean => {
-  const envPassword = import.meta.env.VITE_ADMIN_PASSWORD
-  return password === envPassword
-}
+const sortPrayerRequests = <T extends { created_at: string }>(requests?: T[] | null): T[] =>
+  [...(requests ?? [])].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  )
 
-// Small Groups
-export const getSmallGroups = async (): Promise<SmallGroup[]> => {
+const normalizeMember = (member: Member): Member => ({
+  ...member,
+  prayer_requests: sortPrayerRequests(member.prayer_requests),
+})
+
+export const getGroups = async (): Promise<Group[]> => {
   const { data, error } = await supabase
-    .from('small_groups')
+    .from('groups')
     .select('*')
+    .order('sort_order')
     .order('name')
 
   if (error) throw error
-  return data || []
+  return (data ?? []) as Group[]
 }
 
-export const createSmallGroup = async (name: string): Promise<SmallGroup> => {
+export const createGroup = async (name: string): Promise<Group> => {
   const { data, error } = await supabase
-    .from('small_groups')
+    .from('groups')
     .insert({ name })
     .select()
     .single()
 
   if (error) throw error
-  return data
+  return data as Group
 }
 
-export const updateSmallGroup = async (id: string, name: string): Promise<SmallGroup> => {
+export const updateGroup = async (id: string, name: string): Promise<Group> => {
   const { data, error } = await supabase
-    .from('small_groups')
+    .from('groups')
     .update({ name })
     .eq('id', id)
     .select()
     .single()
 
   if (error) throw error
-  return data
+  return data as Group
 }
 
-export const deleteSmallGroup = async (id: string): Promise<void> => {
+export const deleteGroup = async (id: string): Promise<void> => {
   const { error } = await supabase
-    .from('small_groups')
+    .from('groups')
     .delete()
     .eq('id', id)
 
   if (error) throw error
 }
 
-// Members
+export const getMinistryUnits = async (): Promise<MinistryUnit[]> => {
+  const { data, error } = await supabase
+    .from('ministry_units')
+    .select(`
+      *,
+      group:groups(*)
+    `)
+    .order('sort_order')
+    .order('name')
+
+  if (error) throw error
+  return (data ?? []) as MinistryUnit[]
+}
+
+export const createMinistryUnit = async (unit: {
+  group_id?: string | null
+  unit_type: MinistryUnitType
+  name: string
+}): Promise<MinistryUnit> => {
+  const { data, error } = await supabase
+    .from('ministry_units')
+    .insert({
+      ...unit,
+      group_id: unit.group_id ?? null,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as MinistryUnit
+}
+
+export const updateMinistryUnit = async (
+  id: string,
+  updates: Partial<Pick<MinistryUnit, 'group_id' | 'unit_type' | 'name' | 'sort_order' | 'is_active'>>
+): Promise<MinistryUnit> => {
+  const { data, error } = await supabase
+    .from('ministry_units')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as MinistryUnit
+}
+
+export const deleteMinistryUnit = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('ministry_units')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
+}
+
 export const getMembers = async (): Promise<Member[]> => {
   const { data, error } = await supabase
     .from('members')
-    .select(`
-      *,
-      small_group:small_groups(*),
-      prayer_requests(*)
-    `)
+    .select(MEMBER_SELECT)
     .order('updated_at', { ascending: false })
 
   if (error) throw error
-
-  // 기도제목을 생성순으로 정렬 (먼저 넣은 것이 1번)
-  return (data || []).map(member => ({
-    ...member,
-    prayer_requests: member.prayer_requests?.sort(
-      (a: { created_at: string }, b: { created_at: string }) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
-  }))
+  return ((data ?? []) as Member[]).map(normalizeMember)
 }
 
 export const getMember = async (id: string): Promise<Member | null> => {
   const { data, error } = await supabase
     .from('members')
-    .select(`
-      *,
-      small_group:small_groups(*),
-      prayer_requests(*)
-    `)
+    .select(MEMBER_SELECT)
     .eq('id', id)
     .single()
 
@@ -94,23 +150,16 @@ export const getMember = async (id: string): Promise<Member | null> => {
     throw error
   }
 
-  // 기도제목을 생성순으로 정렬 (먼저 넣은 것이 1번)
-  if (data?.prayer_requests) {
-    data.prayer_requests.sort(
-      (a: { created_at: string }, b: { created_at: string }) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
-  }
-
-  return data
+  return normalizeMember(data as Member)
 }
 
 export const createMember = async (member: {
-  small_group_id: string
+  ministry_unit_id: string
   name: string
-  role: 'pastor' | 'leader' | 'sub_leader'
+  member_type: MemberType
+  member_role: MemberRole
   photo_url?: string
-  photo_position?: { x: number; y: number }
+  photo_position?: PhotoPosition
 }): Promise<Member> => {
   const { data, error } = await supabase
     .from('members')
@@ -119,10 +168,9 @@ export const createMember = async (member: {
     .single()
 
   if (error) throw error
-  return data
+  return data as Member
 }
 
-// 멤버의 updated_at만 갱신 (기도제목 변경 시 최근 업데이트 반영용)
 const touchMember = async (memberId: string): Promise<void> => {
   const { error } = await supabase
     .from('members')
@@ -134,7 +182,9 @@ const touchMember = async (memberId: string): Promise<void> => {
 
 export const updateMember = async (
   id: string,
-  updates: Partial<Omit<Member, 'id' | 'created_at' | 'updated_at'>>
+  updates: Partial<
+    Omit<Member, 'id' | 'created_at' | 'updated_at' | 'ministry_unit' | 'prayer_requests'>
+  >
 ): Promise<Member> => {
   const payload = { ...updates, updated_at: new Date().toISOString() }
   const { data, error } = await supabase
@@ -145,7 +195,7 @@ export const updateMember = async (
     .single()
 
   if (error) throw error
-  return data
+  return data as Member
 }
 
 export const deleteMember = async (id: string): Promise<void> => {
@@ -157,7 +207,6 @@ export const deleteMember = async (id: string): Promise<void> => {
   if (error) throw error
 }
 
-// Prayer Requests
 export const getPrayerRequests = async (memberId?: string): Promise<PrayerRequest[]> => {
   let query = supabase
     .from('prayer_requests')
@@ -171,7 +220,7 @@ export const getPrayerRequests = async (memberId?: string): Promise<PrayerReques
   const { data, error } = await query
 
   if (error) throw error
-  return data || []
+  return (data ?? []) as PrayerRequest[]
 }
 
 export const createPrayerRequest = async (memberId: string, content: string): Promise<PrayerRequest> => {
@@ -183,7 +232,7 @@ export const createPrayerRequest = async (memberId: string, content: string): Pr
 
   if (error) throw error
   await touchMember(memberId)
-  return data
+  return data as PrayerRequest
 }
 
 export const updatePrayerRequest = async (id: string, content: string): Promise<PrayerRequest> => {
@@ -195,8 +244,8 @@ export const updatePrayerRequest = async (id: string, content: string): Promise<
     .single()
 
   if (error) throw error
-  if (data?.member_id) await touchMember(data.member_id)
-  return data
+  if (data?.member_id) await touchMember(data.member_id as string)
+  return data as PrayerRequest
 }
 
 export const deletePrayerRequest = async (id: string): Promise<void> => {
@@ -208,32 +257,19 @@ export const deletePrayerRequest = async (id: string): Promise<void> => {
     .single()
 
   if (error) throw error
-  if (data?.member_id) await touchMember(data.member_id)
+  if (data?.member_id) await touchMember(data.member_id as string)
 }
 
-// 최근 2주 업데이트된 멤버 가져오기
 export const getRecentlyUpdatedMembers = async (): Promise<Member[]> => {
   const twoWeeksAgo = new Date()
   twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14)
 
   const { data, error } = await supabase
     .from('members')
-    .select(`
-      *,
-      small_group:small_groups(*),
-      prayer_requests(*)
-    `)
+    .select(MEMBER_SELECT)
     .gte('updated_at', twoWeeksAgo.toISOString())
     .order('updated_at', { ascending: false })
 
   if (error) throw error
-
-  // 기도제목을 생성순으로 정렬 (먼저 넣은 것이 1번)
-  return (data || []).map(member => ({
-    ...member,
-    prayer_requests: member.prayer_requests?.sort(
-      (a: { created_at: string }, b: { created_at: string }) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
-  }))
+  return ((data ?? []) as Member[]).map(normalizeMember)
 }

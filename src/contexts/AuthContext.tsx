@@ -1,43 +1,86 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { supabase } from '@/lib/supabase'
+import { isAdminAccessEmail, isAllowedAccessEmail } from '@/lib/auth'
 
 interface AuthContextType {
   isAuthenticated: boolean
   isAdmin: boolean
-  login: () => void
-  logout: () => void
-  setAdminMode: (isAdmin: boolean) => void
+  isLoading: boolean
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-const AUTH_KEY = 'prayer_auth'
-const ADMIN_KEY = 'prayer_admin'
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return sessionStorage.getItem(AUTH_KEY) === 'true'
-  })
-  const [isAdmin, setIsAdmin] = useState(() => {
-    return sessionStorage.getItem(ADMIN_KEY) === 'true'
-  })
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    sessionStorage.setItem(AUTH_KEY, String(isAuthenticated))
-  }, [isAuthenticated])
+  const applyAccessEmail = (email?: string | null) => {
+    const hasAccess = isAllowedAccessEmail(email)
 
-  useEffect(() => {
-    sessionStorage.setItem(ADMIN_KEY, String(isAdmin))
-  }, [isAdmin])
-
-  const login = () => setIsAuthenticated(true)
-  const logout = () => {
-    setIsAuthenticated(false)
-    setIsAdmin(false)
+    setIsAuthenticated(hasAccess)
+    setIsAdmin(hasAccess && isAdminAccessEmail(email))
   }
-  const setAdminMode = (admin: boolean) => setIsAdmin(admin)
+
+  useEffect(() => {
+    let isMounted = true
+
+    const initializeAuth = async () => {
+      const { data: sessionData, error } = await supabase.auth.getSession()
+
+      if (error) {
+        console.error('Failed to restore auth session:', error)
+      }
+
+      if (!sessionData.session) {
+        if (!isMounted) return
+
+        applyAccessEmail(null)
+        setIsLoading(false)
+        return
+      }
+
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+
+      if (userError) {
+        console.error('Failed to validate auth session:', userError)
+        await supabase.auth.signOut()
+      }
+
+      if (!isMounted) return
+
+      applyAccessEmail(userData.user?.email ?? null)
+      setIsLoading(false)
+    }
+
+    void initializeAuth()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return
+
+      applyAccessEmail(session?.user?.email ?? null)
+      setIsLoading(false)
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const logout = async () => {
+    const { error } = await supabase.auth.signOut()
+
+    if (error) throw error
+
+    applyAccessEmail(null)
+  }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isAdmin, login, logout, setAdminMode }}>
+    <AuthContext.Provider value={{ isAuthenticated, isAdmin, isLoading, logout }}>
       {children}
     </AuthContext.Provider>
   )

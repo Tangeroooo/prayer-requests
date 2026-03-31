@@ -1,27 +1,49 @@
-export interface SmallGroup {
+export interface Group {
   id: string
   name: string
+  sort_order: number
+  is_active: boolean
   created_at: string
   updated_at: string
 }
 
-export interface Member {
+export type MinistryUnitType = 'small_group' | 'pastor_team' | 'mc_team'
+
+export interface MinistryUnit {
   id: string
-  small_group_id: string
+  group_id: string | null
+  unit_type: MinistryUnitType
   name: string
-  role: 'pastor' | 'leader' | 'sub_leader'
-  photo_url: string | null
-  photo_position: PhotoPosition
+  sort_order: number
+  is_active: boolean
   created_at: string
   updated_at: string
-  small_group?: SmallGroup
-  prayer_requests?: PrayerRequest[]
+  group?: Group | null
 }
 
 export interface PhotoPosition {
   x: number
   y: number
-  zoom?: number // 1 = 100%, 2 = 200%
+  zoom?: number
+}
+
+export type MemberType = 'regular' | 'pastor' | 'mc'
+export type MemberRole = 'member' | 'leader' | 'sub_leader'
+
+export interface Member {
+  id: string
+  ministry_unit_id: string
+  name: string
+  member_type: MemberType
+  member_role: MemberRole
+  photo_url: string | null
+  photo_position: PhotoPosition
+  sort_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  ministry_unit?: MinistryUnit | null
+  prayer_requests?: PrayerRequest[]
 }
 
 export interface PrayerRequest {
@@ -37,24 +59,38 @@ export interface Settings {
   value: string
 }
 
-export type MemberRole = 'pastor' | 'leader' | 'sub_leader'
+export const MINISTRY_UNIT_TYPE_LABELS: Record<MinistryUnitType, string> = {
+  small_group: '다락방',
+  pastor_team: '교역자',
+  mc_team: 'MC단',
+}
 
-export const ROLE_LABELS: Record<MemberRole, string> = {
+export const MINISTRY_UNIT_TYPE_ICONS: Record<MinistryUnitType, string> = {
+  small_group: 'groups',
+  pastor_team: 'church',
+  mc_team: 'mic',
+}
+
+export const MEMBER_TYPE_LABELS: Record<MemberType, string> = {
+  regular: '일반',
   pastor: '교역자',
+  mc: 'MC',
+}
+
+export const MEMBER_TYPE_ICONS: Record<MemberType, string> = {
+  regular: 'person',
+  pastor: 'star',
+  mc: 'mic',
+}
+
+export const MEMBER_ROLE_LABELS: Record<MemberRole, string> = {
+  member: '멤버',
   leader: '다락방장',
   sub_leader: '순장',
 }
 
-// 역할별 아이콘 (Material Icons)
-export const ROLE_ICONS: Record<MemberRole, string> = {
-  pastor: 'star',
+export const MEMBER_ROLE_ICONS: Record<MemberRole, string> = {
+  member: 'person',
   leader: 'groups',
   sub_leader: 'person',
-}
-
-// 정렬용 역할 우선순위 (낮을수록 상위)
-export const ROLE_PRIORITY: Record<MemberRole, number> = {
-  pastor: 0,
-  leader: 1,
-  sub_leader: 2,
 }

@@ -1,21 +1,28 @@
 import { Link } from 'react-router-dom'
 import type { Member } from '@/types'
-import { ROLE_LABELS, ROLE_ICONS } from '@/types'
 import { useSignedUrl } from '@/hooks/useSignedUrl'
 import { useAuth } from '@/contexts/AuthContext'
 import { saveScrollPosition } from '@/hooks/useScrollRestoration'
+import { formatMinistryUnitPath, getMemberBadges } from '@/lib/hierarchy'
 
 interface MemberCardProps {
   member: Member
   isRecent?: boolean
-  showGroup?: boolean
+  showHierarchy?: boolean
   index?: number
 }
 
-export default function MemberCard({ member, isRecent, showGroup = false, index = 0 }: MemberCardProps) {
+export default function MemberCard({
+  member,
+  isRecent,
+  showHierarchy = false,
+  index = 0,
+}: MemberCardProps) {
   const { isAdmin } = useAuth()
   const { signedUrl: photoUrl } = useSignedUrl(member.photo_url)
   const latestPrayerRequest = member.prayer_requests?.[0]
+  const memberBadges = getMemberBadges(member)
+  const hierarchyLabel = formatMinistryUnitPath(member.ministry_unit)
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -37,7 +44,6 @@ export default function MemberCard({ member, isRecent, showGroup = false, index 
       onClick={saveScrollPosition}
     >
       <div className="flex gap-3 sm:gap-4">
-        {/* Photo */}
         <div className="flex-shrink-0">
           {photoUrl ? (
             <div
@@ -56,9 +62,7 @@ export default function MemberCard({ member, isRecent, showGroup = false, index 
           )}
         </div>
 
-        {/* Content */}
         <div className="flex-1 min-w-0">
-          {/* Name and Date row */}
           <div className="flex items-start justify-between gap-2 mb-1">
             <h3 className="text-base sm:text-lg font-bold text-gray-800 group-hover:text-gray-600 transition-colors">
               {member.name}
@@ -69,12 +73,16 @@ export default function MemberCard({ member, isRecent, showGroup = false, index 
             </span>
           </div>
 
-          {/* Badges row */}
           <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
-            <span className="chip text-xs py-0.5 px-1.5 sm:px-2 inline-flex items-center gap-1 whitespace-nowrap">
-              <span className="material-icons text-xs leading-none">{ROLE_ICONS[member.role]}</span>
-              {ROLE_LABELS[member.role]}
-            </span>
+            {memberBadges.map((badge) => (
+              <span
+                key={badge.key}
+                className="chip text-xs py-0.5 px-1.5 sm:px-2 inline-flex items-center gap-1 whitespace-nowrap"
+              >
+                <span className="material-icons text-xs leading-none">{badge.icon}</span>
+                {badge.label}
+              </span>
+            ))}
             {isRecent && (
               <span className="chip-accent text-xs py-0.5 px-1.5 sm:px-2 inline-flex items-center gap-1 whitespace-nowrap">
                 <span className="material-icons text-xs leading-none">auto_awesome</span>
@@ -83,10 +91,10 @@ export default function MemberCard({ member, isRecent, showGroup = false, index 
             )}
           </div>
 
-          {showGroup && member.small_group?.name && (
+          {showHierarchy && hierarchyLabel && (
             <p className="text-sm text-gray-500 mb-1 flex items-center gap-1">
-              <span className="material-icons-outlined text-base">groups</span>
-              {member.small_group.name}
+              <span className="material-icons-outlined text-base">account_tree</span>
+              {hierarchyLabel}
             </p>
           )}
           {latestPrayerRequest && (
