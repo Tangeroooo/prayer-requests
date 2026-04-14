@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -32,6 +32,26 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 
 type AddUnitScope = { kind: 'group'; groupId: string } | { kind: 'root' } | null
 
+interface GroupAdminTab {
+  id: string
+  kind: 'group'
+  label: string
+  group: Group
+  units: MinistryUnit[]
+  memberCount: number
+}
+
+interface CommunityAdminTab {
+  id: string
+  kind: 'root'
+  label: string
+  rootUnits: MinistryUnit[]
+  ungroupedSmallGroups: MinistryUnit[]
+  memberCount: number
+}
+
+type AdminTab = GroupAdminTab | CommunityAdminTab
+
 const isGroupAssignableUnitType = (unitType: MinistryUnitType) => unitType !== 'mc_team'
 
 const getUnitGroupPlaceholder = (unitType: MinistryUnitType) =>
@@ -46,6 +66,7 @@ const normalizeSelectableMemberRole = (memberRole: MemberRole) =>
 
 export default function AdminPage() {
   const queryClient = useQueryClient()
+  const [activeTabId, setActiveTabId] = useState<string | null>(null)
 
   const [editingGroup, setEditingGroup] = useState<Group | null>(null)
   const [editGroupName, setEditGroupName] = useState('')
@@ -192,6 +213,57 @@ export default function AdminPage() {
     sortedUnits.filter((unit) => unit.group_id === groupId)
 
   const getMembersByUnit = (unitId: string) => membersByUnit.get(unitId) ?? []
+
+  const tabs = useMemo<AdminTab[]>(
+    () => [
+      ...sortedGroups.map((group) => {
+        const units = getUnitsByGroup(group.id)
+
+        return {
+          id: `group:${group.id}`,
+          kind: 'group' as const,
+          label: group.name,
+          group,
+          units,
+          memberCount: units.reduce((total, unit) => total + getMembersByUnit(unit.id).length, 0),
+        }
+      }),
+      {
+        id: 'root:community',
+        kind: 'root' as const,
+        label: '공동체',
+        rootUnits,
+        ungroupedSmallGroups,
+        memberCount: [...rootUnits, ...ungroupedSmallGroups].reduce(
+          (total, unit) => total + getMembersByUnit(unit.id).length,
+          0
+        ),
+      },
+    ],
+    [sortedGroups, rootUnits, ungroupedSmallGroups, membersByUnit, sortedUnits]
+  )
+
+  useEffect(() => {
+    if (tabs.length === 0) {
+      setActiveTabId(null)
+      return
+    }
+
+    setActiveTabId((current) => {
+      if (current && tabs.some((tab) => tab.id === current)) {
+        return current
+      }
+
+      return tabs[0].id
+    })
+  }, [tabs])
+
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null,
+    [activeTabId, tabs]
+  )
+  const activeGroupTab = activeTab?.kind === 'group' ? activeTab : null
+  const activeCommunityTab = activeTab?.kind === 'root' ? activeTab : null
 
   const resetMemberForm = () => {
     setNewMemberName('')
@@ -510,77 +582,179 @@ export default function AdminPage() {
     <Layout>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">관리</h1>
 
-      <div className="space-y-6">
-        {sortedGroups.map((group) => {
-          const groupUnits = getUnitsByGroup(group.id)
-          const memberCount = groupUnits.reduce(
-            (total, unit) => total + getMembersByUnit(unit.id).length,
-            0
-          )
+      <div className="space-y-5 sm:space-y-6">
+        {tabs.length > 0 && activeTab && (
+          <div className="sticky top-16 z-20 -mx-4 bg-gradient-to-b from-gray-50 via-gray-50/95 to-transparent px-4 pb-2 pt-1 sm:top-20 sm:-mx-6 sm:px-6">
+            <div className="overflow-x-auto no-scrollbar">
+              <div className="inline-flex min-w-full gap-2 rounded-3xl border border-slate-200 bg-white/90 p-2 shadow-sm backdrop-blur sm:min-w-0">
+                {tabs.map((tab) => {
+                  const isActive = tab.id === activeTab.id
 
-          return (
-            <div key={group.id} className="card">
-              <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-                {editingGroup?.id === group.id ? (
-                  <div className="flex-1 flex gap-2">
-                    <input
-                      type="text"
-                      value={editGroupName}
-                      onChange={(e) => setEditGroupName(e.target.value)}
-                      className="input flex-1"
-                      autoFocus
-                      onKeyDown={(e) => e.key === 'Enter' && handleSaveEditGroup()}
-                    />
-                    <button onClick={handleSaveEditGroup} className="btn-primary text-sm">
-                      저장
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveTabId(tab.id)}
+                      className={`flex min-w-[6.5rem] items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition-all sm:min-w-[7.5rem] ${
+                        isActive
+                          ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/15'
+                          : 'bg-white text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="truncate">{tab.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeGroupTab ? (
+          <div className="card">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+              {editingGroup?.id === activeGroupTab.group.id ? (
+                <div className="flex-1 flex gap-2">
+                  <input
+                    type="text"
+                    value={editGroupName}
+                    onChange={(e) => setEditGroupName(e.target.value)}
+                    className="input flex-1"
+                    autoFocus
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEditGroup()}
+                  />
+                  <button onClick={handleSaveEditGroup} className="btn-primary text-sm">
+                    저장
+                  </button>
+                  <button onClick={() => setEditingGroup(null)} className="btn-secondary text-sm">
+                    취소
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="material-icons-outlined text-gray-400">account_tree</span>
+                    <h2 className="text-lg font-semibold text-gray-900">{activeGroupTab.group.name}</h2>
+                    <span className="text-sm text-gray-400">
+                      ({activeGroupTab.units.length}개 소속 / {activeGroupTab.memberCount}명)
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleStartEditGroup(activeGroupTab.group)}
+                      className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                    >
+                      <span className="material-icons-outlined text-sm">edit</span>
+                      수정
                     </button>
                     <button
-                      onClick={() => setEditingGroup(null)}
-                      className="btn-secondary text-sm"
+                      onClick={() => handleDeleteGroup(activeGroupTab.group)}
+                      className="text-sm text-red-500 hover:text-red-700 flex items-center gap-1"
                     >
+                      <span className="material-icons-outlined text-sm">delete</span>
+                      삭제
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              {activeGroupTab.units.length > 0 ? (
+                activeGroupTab.units.map((unit) => renderUnitCard(unit))
+              ) : (
+                <div className="text-center py-6 text-gray-400 rounded-2xl border border-dashed border-gray-200">
+                  <span className="material-icons-outlined text-3xl mb-2">folder_off</span>
+                  <p className="text-sm">아직 연결된 소속이 없습니다</p>
+                </div>
+              )}
+
+              {addingUnitScope?.kind === 'group' &&
+              addingUnitScope.groupId === activeGroupTab.group.id ? (
+                <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100 space-y-3">
+                  <input
+                    type="text"
+                    value={newUnitName}
+                    onChange={(e) => setNewUnitName(e.target.value)}
+                    placeholder="소속 이름"
+                    className="input"
+                    autoFocus
+                  />
+                  <select
+                    value={newUnitType}
+                    onChange={(e) => setNewUnitType(e.target.value as MinistryUnitType)}
+                    className="input"
+                  >
+                    <option value="small_group">{MINISTRY_UNIT_TYPE_LABELS.small_group}</option>
+                    <option value="pastor_team">{MINISTRY_UNIT_TYPE_LABELS.pastor_team}</option>
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCreateUnit}
+                      disabled={!newUnitName.trim() || createUnitMutation.isPending}
+                      className="btn-primary text-sm"
+                    >
+                      추가
+                    </button>
+                    <button onClick={() => setAddingUnitScope(null)} className="btn-secondary text-sm">
                       취소
                     </button>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="material-icons-outlined text-gray-400">account_tree</span>
-                      <h2 className="text-lg font-semibold text-gray-900">{group.name}</h2>
-                      <span className="text-sm text-gray-400">
-                        ({groupUnits.length}개 소속 / {memberCount}명)
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleStartEditGroup(group)}
-                        className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
-                      >
-                        <span className="material-icons-outlined text-sm">edit</span>
-                        수정
-                      </button>
-                      <button
-                        onClick={() => handleDeleteGroup(group)}
-                        className="text-sm text-red-500 hover:text-red-700 flex items-center gap-1"
-                      >
-                        <span className="material-icons-outlined text-sm">delete</span>
-                        삭제
-                      </button>
-                    </div>
-                  </>
-                )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleStartAddUnitToGroup(activeGroupTab.group.id)}
+                  className="w-full p-3 rounded-lg border-2 border-dashed border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors flex items-center justify-center gap-1 text-sm"
+                >
+                  <span className="material-icons-outlined text-lg">group_add</span>
+                  새 소속 추가
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {activeCommunityTab && activeCommunityTab.ungroupedSmallGroups.length > 0 && (
+              <div className="card border border-amber-200">
+                <div className="mb-4 pb-3 border-b border-amber-100">
+                  <div className="flex items-center gap-2">
+                    <span className="material-icons-outlined text-amber-500">warning_amber</span>
+                    <h2 className="text-lg font-semibold text-gray-900">그룹 미지정 다락방</h2>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-1">
+                    마이그레이션 직후의 다락방이나 아직 그룹이 정해지지 않은 다락방입니다.
+                  </p>
+                </div>
+                <div className="space-y-4">
+                  {activeCommunityTab.ungroupedSmallGroups.map((unit) =>
+                    renderUnitCard(unit, 'bg-amber-50/70 border-amber-100')
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="card">
+              <div className="mb-4 pb-3 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <span className="material-icons-outlined text-gray-400">hub</span>
+                  <h2 className="text-lg font-semibold text-gray-900">공동체</h2>
+                  <span className="text-sm text-gray-400">
+                    ({activeCommunityTab?.rootUnits.length ?? 0}개 소속 / {activeCommunityTab?.memberCount ?? 0}명)
+                  </span>
+                </div>
               </div>
 
               <div className="space-y-4">
-                {groupUnits.length > 0 ? (
-                  groupUnits.map((unit) => renderUnitCard(unit))
+                {activeCommunityTab && activeCommunityTab.rootUnits.length > 0 ? (
+                  activeCommunityTab.rootUnits.map((unit) => renderUnitCard(unit))
                 ) : (
                   <div className="text-center py-6 text-gray-400 rounded-2xl border border-dashed border-gray-200">
                     <span className="material-icons-outlined text-3xl mb-2">folder_off</span>
-                    <p className="text-sm">아직 연결된 소속이 없습니다</p>
+                    <p className="text-sm">등록된 공동체가 없습니다</p>
                   </div>
                 )}
 
-                {addingUnitScope?.kind === 'group' && addingUnitScope.groupId === group.id ? (
+                {addingUnitScope?.kind === 'root' ? (
                   <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100 space-y-3">
                     <input
                       type="text"
@@ -590,14 +764,31 @@ export default function AdminPage() {
                       className="input"
                       autoFocus
                     />
-                    <select
-                      value={newUnitType}
-                      onChange={(e) => setNewUnitType(e.target.value as MinistryUnitType)}
-                      className="input"
-                    >
-                      <option value="small_group">{MINISTRY_UNIT_TYPE_LABELS.small_group}</option>
-                      <option value="pastor_team">{MINISTRY_UNIT_TYPE_LABELS.pastor_team}</option>
-                    </select>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <select
+                        value={newUnitType}
+                        onChange={(e) => setNewUnitType(e.target.value as MinistryUnitType)}
+                        className="input"
+                      >
+                        <option value="pastor_team">{MINISTRY_UNIT_TYPE_LABELS.pastor_team}</option>
+                        <option value="mc_team">{MINISTRY_UNIT_TYPE_LABELS.mc_team}</option>
+                        <option value="small_group">그룹 미지정 다락방</option>
+                      </select>
+                      {isGroupAssignableUnitType(newUnitType) && (
+                        <select
+                          value={newUnitGroupId}
+                          onChange={(e) => setNewUnitGroupId(e.target.value)}
+                          className="input"
+                        >
+                          <option value="">{getUnitGroupPlaceholder(newUnitType)}</option>
+                          {sortedGroups.map((group) => (
+                            <option key={group.id} value={group.id}>
+                              {group.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
                     <div className="flex gap-2">
                       <button
                         onClick={handleCreateUnit}
@@ -606,125 +797,24 @@ export default function AdminPage() {
                       >
                         추가
                       </button>
-                      <button
-                        onClick={() => setAddingUnitScope(null)}
-                        className="btn-secondary text-sm"
-                      >
+                      <button onClick={() => setAddingUnitScope(null)} className="btn-secondary text-sm">
                         취소
                       </button>
                     </div>
                   </div>
                 ) : (
                   <button
-                    onClick={() => handleStartAddUnitToGroup(group.id)}
+                    onClick={handleStartAddRootUnit}
                     className="w-full p-3 rounded-lg border-2 border-dashed border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors flex items-center justify-center gap-1 text-sm"
                   >
-                    <span className="material-icons-outlined text-lg">group_add</span>
+                    <span className="material-icons-outlined text-lg">add</span>
                     새 소속 추가
                   </button>
                 )}
               </div>
             </div>
-          )
-        })}
-
-        {ungroupedSmallGroups.length > 0 && (
-          <div className="card border border-amber-200">
-            <div className="mb-4 pb-3 border-b border-amber-100">
-              <div className="flex items-center gap-2">
-                <span className="material-icons-outlined text-amber-500">warning_amber</span>
-                <h2 className="text-lg font-semibold text-gray-900">그룹 미지정 다락방</h2>
-              </div>
-              <p className="text-sm text-gray-500 mt-1">
-                마이그레이션 직후의 다락방이나 아직 그룹이 정해지지 않은 다락방입니다.
-              </p>
-            </div>
-            <div className="space-y-4">
-              {ungroupedSmallGroups.map((unit) => renderUnitCard(unit, 'bg-amber-50/70 border-amber-100'))}
-            </div>
           </div>
         )}
-
-        <div className="card">
-          <div className="mb-4 pb-3 border-b border-gray-100">
-            <div className="flex items-center gap-2">
-              <span className="material-icons-outlined text-gray-400">hub</span>
-              <h2 className="text-lg font-semibold text-gray-900">공동체</h2>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {rootUnits.length > 0 ? (
-              rootUnits.map((unit) => renderUnitCard(unit))
-            ) : (
-              <div className="text-center py-6 text-gray-400 rounded-2xl border border-dashed border-gray-200">
-                <span className="material-icons-outlined text-3xl mb-2">folder_off</span>
-                <p className="text-sm">등록된 공동체가 없습니다</p>
-              </div>
-            )}
-
-            {addingUnitScope?.kind === 'root' ? (
-              <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100 space-y-3">
-                <input
-                  type="text"
-                  value={newUnitName}
-                  onChange={(e) => setNewUnitName(e.target.value)}
-                  placeholder="소속 이름"
-                  className="input"
-                  autoFocus
-                />
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <select
-                    value={newUnitType}
-                    onChange={(e) => setNewUnitType(e.target.value as MinistryUnitType)}
-                    className="input"
-                  >
-                    <option value="pastor_team">{MINISTRY_UNIT_TYPE_LABELS.pastor_team}</option>
-                    <option value="mc_team">{MINISTRY_UNIT_TYPE_LABELS.mc_team}</option>
-                    <option value="small_group">그룹 미지정 다락방</option>
-                  </select>
-                  {isGroupAssignableUnitType(newUnitType) && (
-                    <select
-                      value={newUnitGroupId}
-                      onChange={(e) => setNewUnitGroupId(e.target.value)}
-                      className="input"
-                    >
-                      <option value="">{getUnitGroupPlaceholder(newUnitType)}</option>
-                      {sortedGroups.map((group) => (
-                        <option key={group.id} value={group.id}>
-                          {group.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleCreateUnit}
-                    disabled={!newUnitName.trim() || createUnitMutation.isPending}
-                    className="btn-primary text-sm"
-                  >
-                    추가
-                  </button>
-                  <button
-                    onClick={() => setAddingUnitScope(null)}
-                    className="btn-secondary text-sm"
-                  >
-                    취소
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={handleStartAddRootUnit}
-                className="w-full p-3 rounded-lg border-2 border-dashed border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors flex items-center justify-center gap-1 text-sm"
-              >
-                <span className="material-icons-outlined text-lg">add</span>
-                새 소속 추가
-              </button>
-            )}
-          </div>
-        </div>
 
         {showAddGroup ? (
           <div className="card">
