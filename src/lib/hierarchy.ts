@@ -2,12 +2,15 @@ import type {
   Group,
   Member,
   MemberRole,
+  MemberType,
   MinistryUnit,
   MinistryUnitType,
 } from '@/types'
 import {
   MEMBER_ROLE_ICONS,
   MEMBER_ROLE_LABELS,
+  MEMBER_TYPE_ICONS,
+  MEMBER_TYPE_LABELS,
 } from '@/types'
 
 export interface MemberBadge {
@@ -27,14 +30,12 @@ const getGroupOrderPriority = (groupName: string) => {
 
 const getMinistryUnitSortPriority = (unitType: MinistryUnitType) => {
   switch (unitType) {
-    case 'group_leadership':
+    case 'small_group':
       return 0
     case 'pastor_team':
       return 1
-    case 'small_group':
-      return 2
     case 'mc_team':
-      return 3
+      return 2
     default:
       return 9
   }
@@ -57,20 +58,14 @@ export const sortMinistryUnits = (units: MinistryUnit[]) =>
   )
 
 export const getMemberSortPriority = (
-  member: Pick<Member, 'member_role'>
+  member: Pick<Member, 'member_type' | 'member_role'>
 ) => {
-  switch (member.member_role) {
-    case 'pastor':
-      return 0
-    case 'leader':
-      return 1
-    case 'sub_leader':
-      return 2
-    case 'mc':
-      return 3
-    default:
-      return 9
-  }
+  if (member.member_type === 'pastor') return 0
+  if (member.member_role === 'group_leadership') return 1
+  if (member.member_role === 'leader') return 2
+  if (member.member_role === 'sub_leader') return 3
+  if (member.member_type === 'mc') return 4
+  return 5
 }
 
 export const sortMembers = (members: Member[]) =>
@@ -82,59 +77,64 @@ export const sortMembers = (members: Member[]) =>
   )
 
 export const getMemberBadges = (
-  member: Pick<Member, 'member_role'>
-): MemberBadge[] => [
-  {
-    icon: MEMBER_ROLE_ICONS[member.member_role],
-    key: `member_role:${member.member_role}`,
-    label: MEMBER_ROLE_LABELS[member.member_role],
-  },
-]
+  member: Pick<Member, 'member_type' | 'member_role'>
+): MemberBadge[] => {
+  const badges: MemberBadge[] = []
+
+  if (member.member_type !== 'regular') {
+    badges.push({
+      icon: MEMBER_TYPE_ICONS[member.member_type],
+      key: `member_type:${member.member_type}`,
+      label: MEMBER_TYPE_LABELS[member.member_type],
+    })
+  }
+
+  if (member.member_role !== 'member') {
+    badges.push({
+      icon: MEMBER_ROLE_ICONS[member.member_role],
+      key: `member_role:${member.member_role}`,
+      label: MEMBER_ROLE_LABELS[member.member_role],
+    })
+  }
+
+  if (badges.length === 0) {
+    badges.push({
+      icon: MEMBER_ROLE_ICONS.member,
+      key: 'member_role:member',
+      label: MEMBER_ROLE_LABELS.member,
+    })
+  }
+
+  return badges
+}
 
 export const formatMinistryUnitPath = (unit?: MinistryUnit | null) => {
   if (!unit) return ''
   return unit.group?.name ? `${unit.group.name} · ${unit.name}` : unit.name
 }
 
-export const getDefaultMemberRoleForUnit = (unitType: MinistryUnitType): MemberRole => {
+export const getDefaultMemberTypeForUnit = (unitType: MinistryUnitType): MemberType => {
   switch (unitType) {
     case 'pastor_team':
       return 'pastor'
     case 'mc_team':
       return 'mc'
-    case 'group_leadership':
-      return 'leader'
+    case 'small_group':
+    default:
+      return 'regular'
+  }
+}
+
+export const getDefaultMemberRoleForUnit = (unitType: MinistryUnitType): MemberRole => {
+  switch (unitType) {
+    case 'pastor_team':
+    case 'mc_team':
+      return 'member'
     case 'small_group':
     default:
       return 'sub_leader'
   }
 }
-
-export const getAvailableMemberRolesForUnit = (unitType: MinistryUnitType): MemberRole[] => {
-  switch (unitType) {
-    case 'small_group':
-      return ['leader', 'sub_leader']
-    case 'pastor_team':
-      return ['pastor']
-    case 'mc_team':
-      return ['mc']
-    case 'group_leadership':
-      return ['leader', 'sub_leader', 'pastor', 'mc']
-    default:
-      return ['sub_leader']
-  }
-}
-
-export const normalizeMemberRoleForUnit = (
-  memberRole: MemberRole,
-  unitType: MinistryUnitType
-): MemberRole => {
-  const availableRoles = getAvailableMemberRolesForUnit(unitType)
-  return availableRoles.includes(memberRole) ? memberRole : availableRoles[0]
-}
-
-export const isRoleFixedForUnit = (unitType: MinistryUnitType) =>
-  getAvailableMemberRolesForUnit(unitType).length === 1
 
 export const isRootMinistryUnit = (unit: MinistryUnit) => unit.group_id === null
 

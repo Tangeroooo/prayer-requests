@@ -10,20 +10,22 @@ import {
   deletePrayerRequest,
 } from '@/lib/api'
 import { deletePhoto, uploadPhoto } from '@/lib/supabase'
-import {
-  formatMinistryUnitPath,
-  getAvailableMemberRolesForUnit,
-  getDefaultMemberRoleForUnit,
-  isRoleFixedForUnit,
-  normalizeMemberRoleForUnit,
-  sortMinistryUnits,
-} from '@/lib/hierarchy'
-import type { MemberRole, PrayerRequest } from '@/types'
-import { MEMBER_ROLE_LABELS } from '@/types'
+import { formatMinistryUnitPath, sortMinistryUnits } from '@/lib/hierarchy'
+import type { MemberRole, MemberType, PrayerRequest } from '@/types'
+import { MEMBER_ROLE_LABELS, MEMBER_TYPE_LABELS } from '@/types'
 import Layout from '@/components/Layout'
 import PhotoUploader from '@/components/PhotoUploader'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { ExclamationIcon, ChevronLeftIcon } from '@/components/Icons'
+
+const usesSelectableMemberRole = (memberType: MemberType) => memberType === 'regular'
+
+const normalizeSelectableMemberRole = (memberRole: MemberRole) =>
+  memberRole === 'leader' ||
+  memberRole === 'sub_leader' ||
+  memberRole === 'group_leadership'
+    ? memberRole
+    : 'sub_leader'
 
 export default function MemberEditPage() {
   const { id } = useParams<{ id: string }>()
@@ -31,6 +33,7 @@ export default function MemberEditPage() {
   const queryClient = useQueryClient()
 
   const [name, setName] = useState('')
+  const [memberType, setMemberType] = useState<MemberType>('regular')
   const [memberRole, setMemberRole] = useState<MemberRole>('sub_leader')
   const [ministryUnitId, setMinistryUnitId] = useState('')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -58,7 +61,12 @@ export default function MemberEditPage() {
   useEffect(() => {
     if (member) {
       setName(member.name)
-      setMemberRole(member.member_role)
+      setMemberType(member.member_type)
+      setMemberRole(
+        member.member_type === 'regular'
+          ? normalizeSelectableMemberRole(member.member_role)
+          : member.member_role
+      )
       setMinistryUnitId(member.ministry_unit_id)
       setPhotoPosition(member.photo_position || { x: 50, y: 50, zoom: 1 })
       setPrayerRequests(member.prayer_requests || [])
@@ -73,11 +81,6 @@ export default function MemberEditPage() {
       formatMinistryUnitPath(a).localeCompare(formatMinistryUnitPath(b), 'ko')
     )
   }, [ministryUnits])
-
-  const selectedUnit = useMemo(
-    () => sortedUnits.find((unit) => unit.id === ministryUnitId) ?? null,
-    [ministryUnitId, sortedUnits]
-  )
 
   const updateMemberMutation = useMutation({
     mutationFn: async () => {
@@ -103,10 +106,10 @@ export default function MemberEditPage() {
 
       await updateMember(id, {
         name,
-        member_role: normalizeMemberRoleForUnit(
-          memberRole,
-          selectedUnit?.unit_type ?? 'small_group'
-        ),
+        member_type: memberType,
+        member_role: usesSelectableMemberRole(memberType)
+          ? normalizeSelectableMemberRole(memberRole)
+          : 'member',
         ministry_unit_id: ministryUnitId,
         photo_url: photoUrl,
         photo_position: photoPosition,
@@ -237,14 +240,7 @@ export default function MemberEditPage() {
             <label className="label">소속 단위</label>
             <select
               value={ministryUnitId}
-              onChange={(e) => {
-                const nextUnitId = e.target.value
-                setMinistryUnitId(nextUnitId)
-                const nextUnit = sortedUnits.find((unit) => unit.id === nextUnitId)
-                if (nextUnit) {
-                  setMemberRole((current) => normalizeMemberRoleForUnit(current, nextUnit.unit_type))
-                }
-              }}
+              onChange={(e) => setMinistryUnitId(e.target.value)}
               className="input"
             >
               {sortedUnits.map((unit) => (
@@ -256,30 +252,44 @@ export default function MemberEditPage() {
           </div>
 
           <div>
-            <label className="label">역할</label>
-            {selectedUnit && isRoleFixedForUnit(selectedUnit.unit_type) ? (
-              <div className="input flex items-center text-gray-500">
-                자동으로 {MEMBER_ROLE_LABELS[getDefaultMemberRoleForUnit(selectedUnit.unit_type)]}로 저장됩니다
-              </div>
-            ) : (
+            <label className="label">멤버 종류</label>
+            <select
+              value={memberType}
+              onChange={(e) => {
+                const nextType = e.target.value as MemberType
+                setMemberType(nextType)
+                if (usesSelectableMemberRole(nextType)) {
+                  setMemberRole((current) => normalizeSelectableMemberRole(current))
+                } else {
+                  setMemberRole('member')
+                }
+              }}
+              className="input"
+            >
+              <option value="regular">{MEMBER_TYPE_LABELS.regular}</option>
+              <option value="pastor">{MEMBER_TYPE_LABELS.pastor}</option>
+              <option value="mc">{MEMBER_TYPE_LABELS.mc}</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="label">직책</label>
+            {usesSelectableMemberRole(memberType) ? (
               <select
                 value={memberRole}
                 onChange={(e) =>
-                  setMemberRole(
-                    normalizeMemberRoleForUnit(
-                      e.target.value as MemberRole,
-                      selectedUnit?.unit_type ?? 'small_group'
-                    )
-                  )
+                  setMemberRole(normalizeSelectableMemberRole(e.target.value as MemberRole))
                 }
                 className="input"
               >
-                {getAvailableMemberRolesForUnit(selectedUnit?.unit_type ?? 'small_group').map((role) => (
-                  <option key={role} value={role}>
-                    {MEMBER_ROLE_LABELS[role]}
-                  </option>
-                ))}
+                <option value="leader">{MEMBER_ROLE_LABELS.leader}</option>
+                <option value="sub_leader">{MEMBER_ROLE_LABELS.sub_leader}</option>
+                <option value="group_leadership">{MEMBER_ROLE_LABELS.group_leadership}</option>
               </select>
+            ) : (
+              <div className="input flex items-center text-gray-500">
+                직책은 자동으로 멤버로 저장됩니다
+              </div>
             )}
           </div>
         </div>

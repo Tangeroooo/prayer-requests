@@ -17,14 +17,12 @@ interface UnitSection {
 
 const getGroupTabUnitPriority = (unit: MinistryUnit) => {
   switch (unit.unit_type) {
-    case 'group_leadership':
-      return 0
     case 'pastor_team':
-      return 1
+      return 0
     case 'small_group':
-      return 2
+      return 1
     case 'mc_team':
-      return 3
+      return 2
     default:
       return 9
   }
@@ -279,7 +277,7 @@ export default function HomePage() {
               <EmptyState
                 icon="folder_off"
                 title="아직 연결된 소속이 없습니다"
-                description="관리자 화면에서 이 그룹 아래 그룹 리더십, 교역자, 다락방 소속을 추가해주세요."
+                description="관리자 화면에서 이 그룹 아래 다락방이나 교역자 소속을 추가해주세요."
               />
             )
           ) : (
