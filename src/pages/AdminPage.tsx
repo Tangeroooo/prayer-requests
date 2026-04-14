@@ -15,20 +15,21 @@ import {
   updateMinistryUnit,
 } from '@/lib/api'
 import {
+  getAvailableMemberRolesForUnit,
   formatMinistryUnitPath,
   getDefaultMemberRoleForUnit,
-  getDefaultMemberTypeForUnit,
   getMemberBadges,
   isRootMinistryUnit,
+  isRoleFixedForUnit,
   isUngroupedSmallGroup,
+  normalizeMemberRoleForUnit,
   sortGroups,
   sortMembers,
   sortMinistryUnits,
 } from '@/lib/hierarchy'
-import type { Group, Member, MemberRole, MemberType, MinistryUnit, MinistryUnitType } from '@/types'
+import type { Group, Member, MemberRole, MinistryUnit, MinistryUnitType } from '@/types'
 import {
   MEMBER_ROLE_LABELS,
-  MEMBER_TYPE_LABELS,
   MINISTRY_UNIT_TYPE_ICONS,
   MINISTRY_UNIT_TYPE_LABELS,
 } from '@/types'
@@ -38,14 +39,12 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 type AddUnitScope = { kind: 'group'; groupId: string } | { kind: 'root' } | null
 
 const isGroupAssignableUnitType = (unitType: MinistryUnitType) => unitType !== 'mc_team'
+const requiresGroupAssignment = (unitType: MinistryUnitType) => unitType === 'group_leadership'
 
-const getUnitGroupPlaceholder = (unitType: MinistryUnitType) =>
-  unitType === 'small_group' ? '그룹 미지정' : '공동체'
-
-const usesSelectableMemberRole = (memberType: MemberType) => memberType === 'regular'
-
-const normalizeSelectableMemberRole = (memberRole: MemberRole) =>
-  memberRole === 'leader' || memberRole === 'sub_leader' ? memberRole : 'sub_leader'
+const getUnitGroupPlaceholder = (unitType: MinistryUnitType) => {
+  if (unitType === 'group_leadership') return '그룹 선택'
+  return unitType === 'small_group' ? '그룹 미지정' : '공동체'
+}
 
 export default function AdminPage() {
   const queryClient = useQueryClient()
@@ -67,7 +66,6 @@ export default function AdminPage() {
 
   const [addingMemberToUnit, setAddingMemberToUnit] = useState<string | null>(null)
   const [newMemberName, setNewMemberName] = useState('')
-  const [newMemberType, setNewMemberType] = useState<MemberType>('regular')
   const [newMemberRole, setNewMemberRole] = useState<MemberRole>('sub_leader')
 
   const { data: groups, isLoading: groupsLoading } = useQuery({
@@ -152,7 +150,6 @@ export default function AdminPage() {
       queryClient.invalidateQueries({ queryKey: ['members'] })
       setAddingMemberToUnit(null)
       setNewMemberName('')
-      setNewMemberType('regular')
       setNewMemberRole('sub_leader')
     },
     onError: (error) => {
@@ -200,7 +197,6 @@ export default function AdminPage() {
 
   const resetMemberForm = () => {
     setNewMemberName('')
-    setNewMemberType('regular')
     setNewMemberRole('sub_leader')
   }
 
@@ -255,6 +251,8 @@ export default function AdminPage() {
           ? newUnitGroupId || null
           : null
 
+    if (requiresGroupAssignment(newUnitType) && !groupId) return
+
     createUnitMutation.mutate({
       name: newUnitName.trim(),
       unit_type: newUnitType,
@@ -272,12 +270,15 @@ export default function AdminPage() {
   const handleSaveEditUnit = () => {
     if (!editingUnit || !editUnitName.trim()) return
 
+    const groupId = isGroupAssignableUnitType(editUnitType) ? editUnitGroupId || null : null
+    if (requiresGroupAssignment(editUnitType) && !groupId) return
+
     updateUnitMutation.mutate({
       id: editingUnit.id,
       updates: {
         name: editUnitName.trim(),
         unit_type: editUnitType,
-        group_id: isGroupAssignableUnitType(editUnitType) ? editUnitGroupId || null : null,
+        group_id: groupId,
       },
     })
   }
@@ -295,8 +296,7 @@ export default function AdminPage() {
   const handleStartAddMember = (unit: MinistryUnit) => {
     setAddingMemberToUnit(unit.id)
     setNewMemberName('')
-    setNewMemberType(getDefaultMemberTypeForUnit(unit.unit_type))
-    setNewMemberRole(normalizeSelectableMemberRole(getDefaultMemberRoleForUnit(unit.unit_type)))
+    setNewMemberRole(getDefaultMemberRoleForUnit(unit.unit_type))
   }
 
   const handleCreateMember = (unit: MinistryUnit) => {
@@ -305,10 +305,7 @@ export default function AdminPage() {
     createMemberMutation.mutate({
       ministry_unit_id: unit.id,
       name: newMemberName.trim(),
-      member_type: newMemberType,
-      member_role: usesSelectableMemberRole(newMemberType)
-        ? normalizeSelectableMemberRole(newMemberRole)
-        : 'member',
+      member_role: normalizeMemberRoleForUnit(newMemberRole, unit.unit_type),
     })
   }
 
@@ -341,6 +338,7 @@ export default function AdminPage() {
                 className="input"
               >
                 <option value="small_group">{MINISTRY_UNIT_TYPE_LABELS.small_group}</option>
+                <option value="group_leadership">{MINISTRY_UNIT_TYPE_LABELS.group_leadership}</option>
                 <option value="pastor_team">{MINISTRY_UNIT_TYPE_LABELS.pastor_team}</option>
                 <option value="mc_team">{MINISTRY_UNIT_TYPE_LABELS.mc_team}</option>
               </select>
@@ -451,39 +449,26 @@ export default function AdminPage() {
                 className="input"
                 autoFocus
               />
-              <div className="grid gap-2 sm:grid-cols-2">
-                <select
-                  value={newMemberType}
-                  onChange={(e) => {
-                    const nextType = e.target.value as MemberType
-                    setNewMemberType(nextType)
-                    if (usesSelectableMemberRole(nextType)) {
-                      setNewMemberRole((current) => normalizeSelectableMemberRole(current))
-                    } else {
-                      setNewMemberRole('member')
-                    }
-                  }}
-                  className="input"
-                >
-                  <option value="regular">{MEMBER_TYPE_LABELS.regular}</option>
-                  <option value="pastor">{MEMBER_TYPE_LABELS.pastor}</option>
-                  <option value="mc">{MEMBER_TYPE_LABELS.mc}</option>
-                </select>
-                {usesSelectableMemberRole(newMemberType) ? (
+              <div>
+                <label className="label">역할</label>
+                {isRoleFixedForUnit(unit.unit_type) ? (
+                  <div className="input flex items-center text-gray-500">
+                    자동으로 {MEMBER_ROLE_LABELS[getDefaultMemberRoleForUnit(unit.unit_type)]}로 저장됩니다
+                  </div>
+                ) : (
                   <select
                     value={newMemberRole}
                     onChange={(e) =>
-                      setNewMemberRole(normalizeSelectableMemberRole(e.target.value as MemberRole))
+                      setNewMemberRole(normalizeMemberRoleForUnit(e.target.value as MemberRole, unit.unit_type))
                     }
                     className="input"
                   >
-                    <option value="leader">{MEMBER_ROLE_LABELS.leader}</option>
-                    <option value="sub_leader">{MEMBER_ROLE_LABELS.sub_leader}</option>
+                    {getAvailableMemberRolesForUnit(unit.unit_type).map((memberRole) => (
+                      <option key={memberRole} value={memberRole}>
+                        {MEMBER_ROLE_LABELS[memberRole]}
+                      </option>
+                    ))}
                   </select>
-                ) : (
-                  <div className="input flex items-center text-gray-500">
-                    직책은 자동으로 멤버로 저장됩니다
-                  </div>
                 )}
               </div>
               <div className="flex gap-2">
@@ -617,6 +602,7 @@ export default function AdminPage() {
                       className="input"
                     >
                       <option value="small_group">{MINISTRY_UNIT_TYPE_LABELS.small_group}</option>
+                      <option value="group_leadership">{MINISTRY_UNIT_TYPE_LABELS.group_leadership}</option>
                       <option value="pastor_team">{MINISTRY_UNIT_TYPE_LABELS.pastor_team}</option>
                     </select>
                     <div className="flex gap-2">

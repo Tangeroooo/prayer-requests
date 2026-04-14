@@ -3,7 +3,6 @@ import type {
   Group,
   Member,
   MemberRole,
-  MemberType,
   MinistryUnit,
   MinistryUnitType,
   PhotoPosition,
@@ -24,8 +23,36 @@ const sortPrayerRequests = <T extends { created_at: string }>(requests?: T[] | n
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   )
 
-const normalizeMember = (member: Member): Member => ({
+type LegacyMemberType = 'regular' | 'pastor' | 'mc'
+
+type StoredMemberRole = MemberRole | 'member'
+
+type MemberRecord = Omit<Member, 'member_role'> & {
+  member_role?: StoredMemberRole | null
+  member_type?: LegacyMemberType | null
+}
+
+const normalizeMemberRole = (member: MemberRecord): MemberRole => {
+  if (
+    member.member_role === 'leader' ||
+    member.member_role === 'sub_leader' ||
+    member.member_role === 'pastor' ||
+    member.member_role === 'mc'
+  ) {
+    return member.member_role
+  }
+
+  if (member.member_type === 'pastor') return 'pastor'
+  if (member.member_type === 'mc') return 'mc'
+  return 'sub_leader'
+}
+
+const getLegacyMemberType = (memberRole: MemberRole): LegacyMemberType =>
+  memberRole === 'pastor' ? 'pastor' : memberRole === 'mc' ? 'mc' : 'regular'
+
+const normalizeMember = (member: MemberRecord): Member => ({
   ...member,
+  member_role: normalizeMemberRole(member),
   prayer_requests: sortPrayerRequests(member.prayer_requests),
 })
 
@@ -156,19 +183,21 @@ export const getMember = async (id: string): Promise<Member | null> => {
 export const createMember = async (member: {
   ministry_unit_id: string
   name: string
-  member_type: MemberType
   member_role: MemberRole
   photo_url?: string
   photo_position?: PhotoPosition
 }): Promise<Member> => {
   const { data, error } = await supabase
     .from('members')
-    .insert(member)
+    .insert({
+      ...member,
+      member_type: getLegacyMemberType(member.member_role),
+    })
     .select()
     .single()
 
   if (error) throw error
-  return data as Member
+  return normalizeMember(data as MemberRecord)
 }
 
 const touchMember = async (memberId: string): Promise<void> => {
@@ -186,7 +215,12 @@ export const updateMember = async (
     Omit<Member, 'id' | 'created_at' | 'updated_at' | 'ministry_unit' | 'prayer_requests'>
   >
 ): Promise<Member> => {
-  const payload = { ...updates, updated_at: new Date().toISOString() }
+  const payload: Record<string, unknown> = { ...updates, updated_at: new Date().toISOString() }
+
+  if (updates.member_role) {
+    payload.member_type = getLegacyMemberType(updates.member_role)
+  }
+
   const { data, error } = await supabase
     .from('members')
     .update(payload)
@@ -195,7 +229,7 @@ export const updateMember = async (
     .single()
 
   if (error) throw error
-  return data as Member
+  return normalizeMember(data as MemberRecord)
 }
 
 export const deleteMember = async (id: string): Promise<void> => {
