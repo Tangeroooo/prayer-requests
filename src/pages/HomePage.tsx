@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getGroups, getMembers, getMinistryUnits } from '@/lib/api'
 import { isUngroupedSmallGroup, sortGroups, sortMembers, sortMinistryUnits } from '@/lib/hierarchy'
@@ -8,7 +8,10 @@ import Layout from '@/components/Layout'
 import MemberCard from '@/components/MemberCard'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { DocumentIcon, SparklesIcon } from '@/components/Icons'
-import { useScrollRestoration } from '@/hooks/useScrollRestoration'
+import {
+  useSessionStorageState,
+  useWindowScrollRestoration,
+} from '@/hooks/useScrollRestoration'
 
 interface UnitSection {
   unit: MinistryUnit
@@ -51,10 +54,14 @@ interface RootTab {
 
 type HomeTab = GroupTab | RootTab
 
-export default function HomePage() {
-  useScrollRestoration()
+const HOME_ACTIVE_TAB_STORAGE_KEY = 'home-page:active-tab'
+const HOME_SCROLL_STORAGE_KEY = 'home-page'
 
-  const [activeTabId, setActiveTabId] = useState<string | null>(null)
+export default function HomePage() {
+  const [activeTabId, setActiveTabId] = useSessionStorageState<string | null>(
+    HOME_ACTIVE_TAB_STORAGE_KEY,
+    null
+  )
 
   const { data: members, isLoading: membersLoading } = useQuery({
     queryKey: ['members'],
@@ -72,6 +79,13 @@ export default function HomePage() {
   })
 
   const isLoading = membersLoading || groupsLoading || unitsLoading
+
+  useWindowScrollRestoration(HOME_SCROLL_STORAGE_KEY, {
+    isReady: !isLoading,
+    resetOnEnter: true,
+    resetOnReload: true,
+    restoreOnPop: true,
+  })
 
   const recentMembers = useMemo(() => {
     if (!members) return []
@@ -175,6 +189,10 @@ export default function HomePage() {
   }, [groupSections, recentMembers, rootUnitSections, ungroupedSmallGroupSections])
 
   useEffect(() => {
+    if (isLoading) {
+      return
+    }
+
     if (tabs.length === 0) {
       setActiveTabId(null)
       return
@@ -186,7 +204,7 @@ export default function HomePage() {
       }
       return tabs[0].id
     })
-  }, [tabs])
+  }, [isLoading, setActiveTabId, tabs])
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null,
@@ -199,6 +217,15 @@ export default function HomePage() {
   )
 
   const hasAnyHierarchySection = tabs.length > 0
+
+  const handleSelectTab = (tabId: string) => {
+    const hasTabChanged = activeTabId !== tabId
+    setActiveTabId(tabId)
+
+    if (hasTabChanged) {
+      window.scrollTo({ top: 0, behavior: 'auto' })
+    }
+  }
 
   if (isLoading) {
     return (
@@ -222,7 +249,7 @@ export default function HomePage() {
                     <button
                       key={tab.id}
                       type="button"
-                      onClick={() => setActiveTabId(tab.id)}
+                      onClick={() => handleSelectTab(tab.id)}
                       className={`flex min-w-[6.5rem] items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition-all sm:min-w-[7.5rem] ${
                         isActive
                           ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/15'

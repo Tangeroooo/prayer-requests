@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getMember,
@@ -15,6 +15,8 @@ import {
   getDefaultMemberTypeForUnit,
   sortMinistryUnits,
 } from '@/lib/hierarchy'
+import { getReturnToPath, hasReturnToState } from '@/lib/navigation'
+import { useScrollToTopOnEnter } from '@/hooks/useScrollRestoration'
 import type { MemberRole, MemberType, PrayerRequest } from '@/types'
 import { MEMBER_ROLE_LABELS } from '@/types'
 import Layout from '@/components/Layout'
@@ -33,8 +35,13 @@ const normalizeSelectableMemberRole = (memberRole: MemberRole) =>
 
 export default function MemberEditPage() {
   const { id } = useParams<{ id: string }>()
+  const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const returnToPath = getReturnToPath(location.state, '/admin')
+  const canUseHistoryBack = hasReturnToState(location.state)
+
+  useScrollToTopOnEnter()
 
   const [name, setName] = useState('')
   const [memberRole, setMemberRole] = useState<MemberRole>('sub_leader')
@@ -176,13 +183,26 @@ export default function MemberEditPage() {
 
     try {
       await updateMemberMutation.mutateAsync()
-      navigate('/')
+      if (canUseHistoryBack) {
+        navigate(-1)
+      } else {
+        navigate(returnToPath, { replace: true })
+      }
     } catch (error) {
       console.error('Failed to save:', error)
       alert('저장에 실패했습니다.')
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleBack = () => {
+    if (canUseHistoryBack) {
+      navigate(-1)
+      return
+    }
+
+    navigate(returnToPath, { replace: true })
   }
 
   if (memberLoading || unitsLoading) {
@@ -214,13 +234,14 @@ export default function MemberEditPage() {
   return (
     <Layout>
       <div className="mb-6">
-        <Link
-          to="/"
+        <button
+          type="button"
+          onClick={handleBack}
           className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors"
         >
           <ChevronLeftIcon className="text-lg" />
           목록으로
-        </Link>
+        </button>
       </div>
 
       <h1 className="text-2xl font-bold text-gray-900 mb-6">멤버 정보 수정</h1>
@@ -345,9 +366,9 @@ export default function MemberEditPage() {
         >
           {isSaving ? '저장 중...' : '저장하기'}
         </button>
-        <Link to="/" className="btn-secondary">
+        <button type="button" onClick={handleBack} className="btn-secondary">
           취소
-        </Link>
+        </button>
       </div>
     </Layout>
   )

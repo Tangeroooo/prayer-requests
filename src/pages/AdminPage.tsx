@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createGroup,
@@ -29,6 +29,11 @@ import type { Group, Member, MemberRole, MemberType, MinistryUnit, MinistryUnitT
 import { MEMBER_ROLE_LABELS, MINISTRY_UNIT_TYPE_ICONS, MINISTRY_UNIT_TYPE_LABELS } from '@/types'
 import Layout from '@/components/Layout'
 import LoadingSpinner from '@/components/LoadingSpinner'
+import {
+  useSessionStorageState,
+  useWindowScrollRestoration,
+} from '@/hooks/useScrollRestoration'
+import { createReturnToState } from '@/lib/navigation'
 
 type AddUnitScope = { kind: 'group'; groupId: string } | { kind: 'root' } | null
 
@@ -64,9 +69,24 @@ const normalizeSelectableMemberRole = (memberRole: MemberRole) =>
     ? memberRole
     : 'sub_leader'
 
+const ADMIN_ACTIVE_TAB_STORAGE_KEY = 'admin-page:active-tab'
+const ADMIN_SCROLL_STORAGE_KEY = 'admin-page'
+const ADMIN_UNIT_SECTION_STORAGE_KEY = 'admin-page:unit-sections'
+
 export default function AdminPage() {
   const queryClient = useQueryClient()
-  const [activeTabId, setActiveTabId] = useState<string | null>(null)
+  const location = useLocation()
+  const [activeTabId, setActiveTabId] = useSessionStorageState<string | null>(
+    ADMIN_ACTIVE_TAB_STORAGE_KEY,
+    null,
+    { resetOnReload: true }
+  )
+  const [expandedUnitSections, setExpandedUnitSections] = useSessionStorageState<
+    Record<string, boolean>
+  >(
+    ADMIN_UNIT_SECTION_STORAGE_KEY,
+    {}
+  )
 
   const [editingGroup, setEditingGroup] = useState<Group | null>(null)
   const [editGroupName, setEditGroupName] = useState('')
@@ -100,6 +120,15 @@ export default function AdminPage() {
   const { data: members, isLoading: membersLoading } = useQuery({
     queryKey: ['members'],
     queryFn: getMembers,
+  })
+
+  const isLoading = groupsLoading || unitsLoading || membersLoading
+
+  useWindowScrollRestoration(ADMIN_SCROLL_STORAGE_KEY, {
+    isReady: !isLoading,
+    resetOnEnter: true,
+    resetOnReload: true,
+    restoreOnPop: true,
   })
 
   const createGroupMutation = useMutation({
@@ -209,15 +238,12 @@ export default function AdminPage() {
     [sortedUnits]
   )
 
-  const getUnitsByGroup = (groupId: string) =>
-    sortedUnits.filter((unit) => unit.group_id === groupId)
-
   const getMembersByUnit = (unitId: string) => membersByUnit.get(unitId) ?? []
 
   const tabs = useMemo<AdminTab[]>(
     () => [
       ...sortedGroups.map((group) => {
-        const units = getUnitsByGroup(group.id)
+        const units = sortedUnits.filter((unit) => unit.group_id === group.id)
 
         return {
           id: `group:${group.id}`,
@@ -225,7 +251,10 @@ export default function AdminPage() {
           label: group.name,
           group,
           units,
-          memberCount: units.reduce((total, unit) => total + getMembersByUnit(unit.id).length, 0),
+          memberCount: units.reduce(
+            (total, unit) => total + (membersByUnit.get(unit.id)?.length ?? 0),
+            0
+          ),
         }
       }),
       {
@@ -235,15 +264,19 @@ export default function AdminPage() {
         rootUnits,
         ungroupedSmallGroups,
         memberCount: [...rootUnits, ...ungroupedSmallGroups].reduce(
-          (total, unit) => total + getMembersByUnit(unit.id).length,
+          (total, unit) => total + (membersByUnit.get(unit.id)?.length ?? 0),
           0
         ),
       },
     ],
-    [sortedGroups, rootUnits, ungroupedSmallGroups, membersByUnit, sortedUnits]
+    [membersByUnit, rootUnits, sortedGroups, sortedUnits, ungroupedSmallGroups]
   )
 
   useEffect(() => {
+    if (isLoading) {
+      return
+    }
+
     if (tabs.length === 0) {
       setActiveTabId(null)
       return
@@ -256,7 +289,7 @@ export default function AdminPage() {
 
       return tabs[0].id
     })
-  }, [tabs])
+  }, [isLoading, setActiveTabId, tabs])
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null,
@@ -264,6 +297,24 @@ export default function AdminPage() {
   )
   const activeGroupTab = activeTab?.kind === 'group' ? activeTab : null
   const activeCommunityTab = activeTab?.kind === 'root' ? activeTab : null
+
+  const handleSelectTab = (tabId: string) => {
+    const hasTabChanged = activeTabId !== tabId
+    setActiveTabId(tabId)
+
+    if (hasTabChanged) {
+      window.scrollTo({ top: 0, behavior: 'auto' })
+    }
+  }
+
+  const isUnitSectionExpanded = (unitId: string) => expandedUnitSections[unitId] ?? false
+
+  const setUnitSectionExpanded = (unitId: string, isExpanded: boolean) => {
+    setExpandedUnitSections((current) => ({
+      ...current,
+      [unitId]: isExpanded,
+    }))
+  }
 
   const resetMemberForm = () => {
     setNewMemberName('')
@@ -329,6 +380,7 @@ export default function AdminPage() {
   }
 
   const handleStartEditUnit = (unit: MinistryUnit) => {
+    setUnitSectionExpanded(unit.id, true)
     setEditingUnit(unit)
     setEditUnitName(unit.name)
     setEditUnitType(unit.unit_type)
@@ -359,6 +411,7 @@ export default function AdminPage() {
   }
 
   const handleStartAddMember = (unit: MinistryUnit) => {
+    setUnitSectionExpanded(unit.id, true)
     setAddingMemberToUnit(unit.id)
     setNewMemberName('')
     setNewMemberRole(normalizeSelectableMemberRole(getDefaultMemberRoleForUnit(unit.unit_type)))
@@ -388,189 +441,215 @@ export default function AdminPage() {
   const renderUnitCard = (unit: MinistryUnit, accentClassName = 'bg-gray-50 border-gray-100') => {
     const unitMembers = getMembersByUnit(unit.id)
     const isEditingThisUnit = editingUnit?.id === unit.id
+    const hasInlineFormOpen = addingMemberToUnit === unit.id
+    const isSectionExpanded = isEditingThisUnit || hasInlineFormOpen || isUnitSectionExpanded(unit.id)
     const unitIcon = MINISTRY_UNIT_TYPE_ICONS[isEditingThisUnit ? editUnitType : unit.unit_type]
 
     return (
       <div key={unit.id} className={`rounded-2xl border p-3 sm:p-4 ${accentClassName}`}>
-        {isEditingThisUnit ? (
-          <div className="space-y-3 mb-4">
-            <input
-              type="text"
-              value={editUnitName}
-              onChange={(e) => setEditUnitName(e.target.value)}
-              className="input"
-              autoFocus
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <select
-                value={editUnitType}
-                onChange={(e) => setEditUnitType(e.target.value as MinistryUnitType)}
-                className="input"
-              >
-                <option value="small_group">{MINISTRY_UNIT_TYPE_LABELS.small_group}</option>
-                <option value="pastor_team">{MINISTRY_UNIT_TYPE_LABELS.pastor_team}</option>
-                <option value="mc_team">{MINISTRY_UNIT_TYPE_LABELS.mc_team}</option>
-              </select>
-              {isGroupAssignableUnitType(editUnitType) && (
-                <select
-                  value={editUnitGroupId}
-                  onChange={(e) => setEditUnitGroupId(e.target.value)}
-                  className="input"
-                >
-                  <option value="">{getUnitGroupPlaceholder(editUnitType)}</option>
-                  {sortedGroups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={handleSaveEditUnit} className="btn-primary text-sm">
-                저장
-              </button>
-              <button onClick={() => setEditingUnit(null)} className="btn-secondary text-sm">
-                취소
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-start justify-between gap-3 mb-4 pb-3 border-b border-white/70">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="material-icons-outlined text-gray-400">{unitIcon}</span>
+        <div className="flex items-start justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setUnitSectionExpanded(unit.id, !isSectionExpanded)}
+            className="flex min-w-0 flex-1 items-start gap-3 text-left"
+            aria-expanded={isSectionExpanded}
+          >
+            <span className="material-icons-outlined mt-0.5 text-gray-400">{unitIcon}</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-semibold text-gray-900">{unit.name}</h3>
                 <span className="text-sm text-gray-400">({unitMembers.length}명)</span>
               </div>
-              <p className="text-sm text-gray-500 mt-1">
-                {formatMinistryUnitPath(unit)}
-              </p>
+              <p className="mt-1 text-sm text-gray-500">{formatMinistryUnitPath(unit)}</p>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleStartEditUnit(unit)}
-                className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
-              >
-                <span className="material-icons-outlined text-sm">edit</span>
-                수정
-              </button>
-              <button
-                onClick={() => handleDeleteUnit(unit)}
-                className="text-sm text-red-500 hover:text-red-700 flex items-center gap-1"
-              >
-                <span className="material-icons-outlined text-sm">delete</span>
-                삭제
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-2">
-          {unitMembers.map((member) => (
-            <div
-              key={member.id}
-              className="flex items-center justify-between p-3 rounded-lg bg-white/90"
-            >
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="material-icons-outlined text-gray-400 text-lg">person</span>
-                <span className="font-medium text-gray-900">{member.name}</span>
-                {getMemberBadges(member).map((badge) => (
-                  <span
-                    key={badge.key}
-                    className="chip text-xs py-0.5 px-2 inline-flex items-center gap-1"
-                  >
-                    <span className="material-icons text-xs leading-none">{badge.icon}</span>
-                    {badge.label}
-                  </span>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Link
-                  to={`/member/${member.id}/edit`}
-                  className="text-sm text-blue-600 hover:text-blue-700"
-                >
-                  편집
-                </Link>
+          </button>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            {!isEditingThisUnit && (
+              <>
                 <button
-                  onClick={() => handleDeleteMember(member)}
-                  className="text-sm text-red-500 hover:text-red-700"
+                  onClick={() => handleStartEditUnit(unit)}
+                  className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
                 >
+                  <span className="material-icons-outlined text-sm">edit</span>
+                  수정
+                </button>
+                <button
+                  onClick={() => handleDeleteUnit(unit)}
+                  className="text-sm text-red-500 hover:text-red-700 flex items-center gap-1"
+                >
+                  <span className="material-icons-outlined text-sm">delete</span>
                   삭제
                 </button>
-              </div>
-            </div>
-          ))}
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setUnitSectionExpanded(unit.id, !isSectionExpanded)}
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white/90 p-1.5 text-slate-400 shadow-sm transition-colors hover:bg-white hover:text-slate-600"
+              aria-label={isSectionExpanded ? '섹션 접기' : '섹션 펼치기'}
+            >
+              <span
+                className={`material-icons-outlined text-2xl transition-transform ${
+                  isSectionExpanded ? 'rotate-180' : ''
+                }`}
+              >
+                expand_more
+              </span>
+            </button>
+          </div>
+        </div>
 
-          {unitMembers.length === 0 && addingMemberToUnit !== unit.id && (
-            <p className="text-center text-gray-400 py-4 text-sm">
-              아직 멤버가 없습니다
-            </p>
-          )}
-
-          {addingMemberToUnit === unit.id ? (
-            <div className="p-4 rounded-lg bg-white border border-blue-100 space-y-3">
-              <input
-                type="text"
-                value={newMemberName}
-                onChange={(e) => setNewMemberName(e.target.value)}
-                placeholder="이름"
-                className="input"
-                autoFocus
-              />
-              <div className="grid gap-2 sm:grid-cols-2">
-                {usesSelectableMemberRole(getDefaultMemberTypeForUnit(unit.unit_type)) ? (
+        {isSectionExpanded && (
+          <div className="mt-4 space-y-2 border-t border-white/70 pt-4">
+            {isEditingThisUnit ? (
+              <div className="mb-4 space-y-3">
+                <input
+                  type="text"
+                  value={editUnitName}
+                  onChange={(e) => setEditUnitName(e.target.value)}
+                  className="input"
+                  autoFocus
+                />
+                <div className="grid gap-3 sm:grid-cols-2">
                   <select
-                    value={newMemberRole}
-                    onChange={(e) =>
-                      setNewMemberRole(normalizeSelectableMemberRole(e.target.value as MemberRole))
-                    }
+                    value={editUnitType}
+                    onChange={(e) => setEditUnitType(e.target.value as MinistryUnitType)}
                     className="input"
                   >
-                    <option value="leader">{MEMBER_ROLE_LABELS.leader}</option>
-                    <option value="sub_leader">{MEMBER_ROLE_LABELS.sub_leader}</option>
-                    <option value="group_leadership">{MEMBER_ROLE_LABELS.group_leadership}</option>
+                    <option value="small_group">{MINISTRY_UNIT_TYPE_LABELS.small_group}</option>
+                    <option value="pastor_team">{MINISTRY_UNIT_TYPE_LABELS.pastor_team}</option>
+                    <option value="mc_team">{MINISTRY_UNIT_TYPE_LABELS.mc_team}</option>
                   </select>
-                ) : (
-                  <div className="input flex items-center text-gray-500">
-                    멤버 종류와 직책은 소속에 따라 자동으로 저장됩니다
-                  </div>
-                )}
+                  {isGroupAssignableUnitType(editUnitType) && (
+                    <select
+                      value={editUnitGroupId}
+                      onChange={(e) => setEditUnitGroupId(e.target.value)}
+                      className="input"
+                    >
+                      <option value="">{getUnitGroupPlaceholder(editUnitType)}</option>
+                      {sortedGroups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleSaveEditUnit} className="btn-primary text-sm">
+                    저장
+                  </button>
+                  <button onClick={() => setEditingUnit(null)} className="btn-secondary text-sm">
+                    취소
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleCreateMember(unit)}
-                  disabled={!newMemberName.trim() || createMemberMutation.isPending}
-                  className="btn-primary text-sm"
-                >
-                  추가
-                </button>
-                <button
-                  onClick={() => {
-                    setAddingMemberToUnit(null)
-                    resetMemberForm()
-                  }}
-                  className="btn-secondary text-sm"
-                >
-                  취소
-                </button>
+            ) : null}
+
+            {unitMembers.map((member) => (
+              <div
+                key={member.id}
+                className="flex items-center justify-between p-3 rounded-lg bg-white/90"
+              >
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="material-icons-outlined text-gray-400 text-lg">person</span>
+                  <span className="font-medium text-gray-900">{member.name}</span>
+                  {getMemberBadges(member).map((badge) => (
+                    <span
+                      key={badge.key}
+                      className="chip text-xs py-0.5 px-2 inline-flex items-center gap-1"
+                    >
+                      <span className="material-icons text-xs leading-none">{badge.icon}</span>
+                      {badge.label}
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Link
+                    to={`/member/${member.id}/edit`}
+                    state={createReturnToState(location.pathname, location.search, location.hash)}
+                    className="text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    편집
+                  </Link>
+                  <button
+                    onClick={() => handleDeleteMember(member)}
+                    className="text-sm text-red-500 hover:text-red-700"
+                  >
+                    삭제
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => handleStartAddMember(unit)}
-              className="w-full p-3 rounded-lg border-2 border-dashed border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors flex items-center justify-center gap-1 text-sm"
-            >
-              <span className="material-icons-outlined text-lg">person_add</span>
-              새 멤버 추가
-            </button>
-          )}
-        </div>
+            ))}
+
+            {unitMembers.length === 0 && !hasInlineFormOpen && (
+              <p className="py-4 text-center text-sm text-gray-400">아직 멤버가 없습니다</p>
+            )}
+
+            {hasInlineFormOpen ? (
+              <div className="space-y-3 rounded-lg border border-blue-100 bg-white p-4">
+                <input
+                  type="text"
+                  value={newMemberName}
+                  onChange={(e) => setNewMemberName(e.target.value)}
+                  placeholder="이름"
+                  className="input"
+                  autoFocus
+                />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {usesSelectableMemberRole(getDefaultMemberTypeForUnit(unit.unit_type)) ? (
+                    <select
+                      value={newMemberRole}
+                      onChange={(e) =>
+                        setNewMemberRole(normalizeSelectableMemberRole(e.target.value as MemberRole))
+                      }
+                      className="input"
+                    >
+                      <option value="leader">{MEMBER_ROLE_LABELS.leader}</option>
+                      <option value="sub_leader">{MEMBER_ROLE_LABELS.sub_leader}</option>
+                      <option value="group_leadership">{MEMBER_ROLE_LABELS.group_leadership}</option>
+                    </select>
+                  ) : (
+                    <div className="input flex items-center text-gray-500">
+                      멤버 종류와 직책은 소속에 따라 자동으로 저장됩니다
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleCreateMember(unit)}
+                    disabled={!newMemberName.trim() || createMemberMutation.isPending}
+                    className="btn-primary text-sm"
+                  >
+                    추가
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAddingMemberToUnit(null)
+                      resetMemberForm()
+                    }}
+                    className="btn-secondary text-sm"
+                  >
+                    취소
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => handleStartAddMember(unit)}
+                className="flex w-full items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-200 p-3 text-sm text-gray-500 transition-colors hover:border-blue-300 hover:text-blue-600"
+              >
+                <span className="material-icons-outlined text-lg">person_add</span>
+                새 멤버 추가
+              </button>
+            )}
+          </div>
+        )}
       </div>
     )
   }
 
-  if (groupsLoading || unitsLoading || membersLoading) {
+  if (isLoading) {
     return (
       <Layout>
         <LoadingSpinner />
@@ -594,7 +673,7 @@ export default function AdminPage() {
                     <button
                       key={tab.id}
                       type="button"
-                      onClick={() => setActiveTabId(tab.id)}
+                      onClick={() => handleSelectTab(tab.id)}
                       className={`flex min-w-[6.5rem] items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition-all sm:min-w-[7.5rem] ${
                         isActive
                           ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/15'

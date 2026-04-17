@@ -1,9 +1,9 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import type { Member } from '@/types'
 import { useSignedUrl } from '@/hooks/useSignedUrl'
 import { useAuth } from '@/contexts/AuthContext'
-import { saveScrollPosition } from '@/hooks/useScrollRestoration'
 import { formatMinistryUnitPath, getMemberBadges } from '@/lib/hierarchy'
+import { createReturnToState } from '@/lib/navigation'
 
 interface MemberCardProps {
   member: Member
@@ -19,6 +19,7 @@ export default function MemberCard({
   index = 0,
 }: MemberCardProps) {
   const { isAdmin } = useAuth()
+  const location = useLocation()
   const { signedUrl: photoUrl } = useSignedUrl(member.photo_url)
   const latestPrayerRequest = member.prayer_requests?.[0]
   const memberBadges = getMemberBadges(member)
@@ -40,8 +41,8 @@ export default function MemberCard({
   return (
     <Link
       to={isAdmin ? `/member/${member.id}/edit` : `/member/${member.id}`}
+      state={createReturnToState(location.pathname, location.search, location.hash)}
       className={`card group block animate-fade-in-up stagger-${Math.min(index + 1, 6)}`}
-      onClick={saveScrollPosition}
     >
       <div className="flex gap-3 sm:gap-4">
         <div className="flex-shrink-0">

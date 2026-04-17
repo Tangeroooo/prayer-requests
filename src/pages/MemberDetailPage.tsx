@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getMember } from '@/lib/api'
 import { formatMinistryUnitPath, getMemberBadges } from '@/lib/hierarchy'
+import { getReturnToPath, hasReturnToState } from '@/lib/navigation'
+import { useScrollToTopOnEnter } from '@/hooks/useScrollRestoration'
 import { useSignedUrl } from '@/hooks/useSignedUrl'
 import Layout from '@/components/Layout'
 import LoadingSpinner from '@/components/LoadingSpinner'
@@ -10,7 +12,22 @@ import { ExclamationIcon, ChevronLeftIcon } from '@/components/Icons'
 
 export default function MemberDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false)
+  const returnToPath = getReturnToPath(location.state, '/')
+  const canUseHistoryBack = hasReturnToState(location.state)
+
+  useScrollToTopOnEnter()
+
+  const handleBack = () => {
+    if (canUseHistoryBack) {
+      navigate(-1)
+      return
+    }
+
+    navigate(returnToPath, { replace: true })
+  }
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -75,13 +92,14 @@ export default function MemberDetailPage() {
   return (
     <Layout>
       <div className="mb-3 sm:mb-6">
-        <Link
-          to="/"
+        <button
+          type="button"
+          onClick={handleBack}
           className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors"
         >
           <ChevronLeftIcon className="text-lg" />
           목록으로
-        </Link>
+        </button>
       </div>
 
       <div className="card mb-4 sm:mb-6">
