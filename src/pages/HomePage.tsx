@@ -10,7 +10,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import { DocumentIcon, SparklesIcon } from '@/components/Icons'
 import {
   useSessionStorageState,
-  useWindowScrollRestoration,
+  useScopedWindowScrollRestoration,
 } from '@/hooks/useScrollRestoration'
 
 interface UnitSection {
@@ -79,13 +79,6 @@ export default function HomePage() {
   })
 
   const isLoading = membersLoading || groupsLoading || unitsLoading
-
-  useWindowScrollRestoration(HOME_SCROLL_STORAGE_KEY, {
-    isReady: !isLoading,
-    resetOnEnter: true,
-    resetOnReload: true,
-    restoreOnPop: true,
-  })
 
   const recentMembers = useMemo(() => {
     if (!members) return []
@@ -211,6 +204,11 @@ export default function HomePage() {
     [activeTabId, tabs]
   )
 
+  useScopedWindowScrollRestoration(HOME_SCROLL_STORAGE_KEY, activeTab?.id ?? null, {
+    isReady: !isLoading,
+    fallbackScrollY: 0,
+  })
+
   const activeRecentMemberIds = useMemo(
     () => new Set(activeTab?.recentMembers.map((member) => member.id) ?? []),
     [activeTab]
@@ -219,12 +217,7 @@ export default function HomePage() {
   const hasAnyHierarchySection = tabs.length > 0
 
   const handleSelectTab = (tabId: string) => {
-    const hasTabChanged = activeTabId !== tabId
     setActiveTabId(tabId)
-
-    if (hasTabChanged) {
-      window.scrollTo({ top: 0, behavior: 'auto' })
-    }
   }
 
   if (isLoading) {

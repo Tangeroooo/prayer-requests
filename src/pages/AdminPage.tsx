@@ -31,7 +31,7 @@ import Layout from '@/components/Layout'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import {
   useSessionStorageState,
-  useWindowScrollRestoration,
+  useScopedWindowScrollRestoration,
 } from '@/hooks/useScrollRestoration'
 import { createReturnToState } from '@/lib/navigation'
 
@@ -78,8 +78,7 @@ export default function AdminPage() {
   const location = useLocation()
   const [activeTabId, setActiveTabId] = useSessionStorageState<string | null>(
     ADMIN_ACTIVE_TAB_STORAGE_KEY,
-    null,
-    { resetOnReload: true }
+    null
   )
   const [expandedUnitSections, setExpandedUnitSections] = useSessionStorageState<
     Record<string, boolean>
@@ -123,13 +122,6 @@ export default function AdminPage() {
   })
 
   const isLoading = groupsLoading || unitsLoading || membersLoading
-
-  useWindowScrollRestoration(ADMIN_SCROLL_STORAGE_KEY, {
-    isReady: !isLoading,
-    resetOnEnter: true,
-    resetOnReload: true,
-    restoreOnPop: true,
-  })
 
   const createGroupMutation = useMutation({
     mutationFn: createGroup,
@@ -298,13 +290,13 @@ export default function AdminPage() {
   const activeGroupTab = activeTab?.kind === 'group' ? activeTab : null
   const activeCommunityTab = activeTab?.kind === 'root' ? activeTab : null
 
-  const handleSelectTab = (tabId: string) => {
-    const hasTabChanged = activeTabId !== tabId
-    setActiveTabId(tabId)
+  useScopedWindowScrollRestoration(ADMIN_SCROLL_STORAGE_KEY, activeTab?.id ?? null, {
+    isReady: !isLoading,
+    fallbackScrollY: 0,
+  })
 
-    if (hasTabChanged) {
-      window.scrollTo({ top: 0, behavior: 'auto' })
-    }
+  const handleSelectTab = (tabId: string) => {
+    setActiveTabId(tabId)
   }
 
   const isUnitSectionExpanded = (unitId: string) => expandedUnitSections[unitId] ?? false

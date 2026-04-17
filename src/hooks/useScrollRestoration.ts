@@ -43,7 +43,7 @@ const writeSessionStorage = <T>(key: string, value: T) => {
   }
 }
 
-const scheduleWindowScrollRestore = (storageKey: string) => {
+const readStoredScrollPosition = (storageKey: string) => {
   const savedPosition = window.sessionStorage.getItem(storageKey)
 
   if (!savedPosition) {
@@ -56,8 +56,17 @@ const scheduleWindowScrollRestore = (storageKey: string) => {
     return null
   }
 
+  return targetPosition
+}
+
+const scheduleWindowScrollTo = (targetPosition: number) => {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
   let cancelled = false
   let attempts = 0
+  let timeoutId: number | null = null
 
   const restoreScroll = () => {
     if (cancelled) {
@@ -67,19 +76,37 @@ const scheduleWindowScrollRestore = (storageKey: string) => {
     window.scrollTo(0, targetPosition)
 
     if (Math.abs(window.scrollY - targetPosition) <= 2 || attempts >= 10) {
+      timeoutId = null
       return
     }
 
     attempts += 1
-    window.setTimeout(restoreScroll, 80)
+    timeoutId = window.setTimeout(restoreScroll, 80)
   }
 
-  const timeoutId = window.setTimeout(restoreScroll, 0)
+  restoreScroll()
 
   return () => {
     cancelled = true
-    window.clearTimeout(timeoutId)
+
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId)
+    }
   }
+}
+
+const scheduleWindowScrollRestore = (storageKey: string, fallbackPosition?: number) => {
+  const targetPosition = readStoredScrollPosition(storageKey)
+
+  if (targetPosition === null) {
+    if (typeof fallbackPosition !== 'number') {
+      return null
+    }
+
+    return scheduleWindowScrollTo(fallbackPosition)
+  }
+
+  return scheduleWindowScrollTo(targetPosition)
 }
 
 export function useSessionStorageState<T>(
@@ -191,6 +218,62 @@ export function useWindowScrollRestoration(
     shouldResetOnReload,
     storageKey,
   ])
+}
+
+export function useScopedWindowScrollRestoration(
+  key: string | null,
+  scopeId: string | null,
+  options?: {
+    isReady?: boolean
+    fallbackScrollY?: number
+  }
+) {
+  const isReady = options?.isReady ?? true
+  const fallbackScrollY = options?.fallbackScrollY ?? 0
+  const storageKey =
+    key && scopeId ? buildStorageKey(`${key}:scroll-y:${scopeId}`) : null
+
+  useEffect(() => {
+    if (!storageKey) {
+      return
+    }
+
+    let frameId: number | null = null
+
+    const persistScroll = () => {
+      window.sessionStorage.setItem(storageKey, window.scrollY.toString())
+    }
+
+    const handleScroll = () => {
+      if (frameId !== null) {
+        return
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        persistScroll()
+      })
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+      }
+
+      persistScroll()
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [storageKey])
+
+  useEffect(() => {
+    if (!isReady || !storageKey) {
+      return
+    }
+
+    return scheduleWindowScrollRestore(storageKey, fallbackScrollY) ?? undefined
+  }, [fallbackScrollY, isReady, storageKey])
 }
 
 export function useScrollToTopOnEnter(isReady = true) {
