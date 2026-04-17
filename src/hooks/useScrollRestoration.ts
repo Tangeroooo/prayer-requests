@@ -43,6 +43,14 @@ const writeSessionStorage = <T>(key: string, value: T) => {
   }
 }
 
+const writeWindowScrollPosition = (storageKey: string, scrollY: number) => {
+  try {
+    window.sessionStorage.setItem(storageKey, scrollY.toString())
+  } catch (error) {
+    console.error('Failed to write scroll position:', error)
+  }
+}
+
 const readStoredScrollPosition = (storageKey: string) => {
   const savedPosition = window.sessionStorage.getItem(storageKey)
 
@@ -109,6 +117,60 @@ const scheduleWindowScrollRestore = (storageKey: string, fallbackPosition?: numb
   return scheduleWindowScrollTo(targetPosition)
 }
 
+function usePersistedWindowScroll(storageKey: string | null) {
+  const latestScrollYRef = useRef(0)
+
+  useEffect(() => {
+    if (!storageKey) {
+      return
+    }
+
+    let frameId: number | null = null
+    latestScrollYRef.current = window.scrollY
+
+    const persistLatestScroll = () => {
+      writeWindowScrollPosition(storageKey, latestScrollYRef.current)
+    }
+
+    const handleScroll = () => {
+      latestScrollYRef.current = window.scrollY
+
+      if (frameId !== null) {
+        return
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        persistLatestScroll()
+      })
+    }
+
+    const handlePageHide = () => {
+      latestScrollYRef.current = window.scrollY
+
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+        frameId = null
+      }
+
+      persistLatestScroll()
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    window.addEventListener('pagehide', handlePageHide)
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+      }
+
+      persistLatestScroll()
+      window.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('pagehide', handlePageHide)
+    }
+  }, [storageKey])
+}
+
 export function useSessionStorageState<T>(
   key: string,
   initialValue: T,
@@ -151,39 +213,7 @@ export function useWindowScrollRestoration(
   const storageKey = key ? buildStorageKey(`${key}:scroll-y`) : null
   const hasHandledEntryRef = useRef(false)
 
-  useEffect(() => {
-    if (!storageKey) {
-      return
-    }
-
-    let frameId: number | null = null
-
-    const persistScroll = () => {
-      window.sessionStorage.setItem(storageKey, window.scrollY.toString())
-    }
-
-    const handleScroll = () => {
-      if (frameId !== null) {
-        return
-      }
-
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null
-        persistScroll()
-      })
-    }
-
-    window.addEventListener('scroll', handleScroll, { passive: true })
-
-    return () => {
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId)
-      }
-
-      persistScroll()
-      window.removeEventListener('scroll', handleScroll)
-    }
-  }, [storageKey])
+  usePersistedWindowScroll(storageKey)
 
   useEffect(() => {
     if (!isReady || hasHandledEntryRef.current) {
@@ -233,39 +263,7 @@ export function useScopedWindowScrollRestoration(
   const storageKey =
     key && scopeId ? buildStorageKey(`${key}:scroll-y:${scopeId}`) : null
 
-  useEffect(() => {
-    if (!storageKey) {
-      return
-    }
-
-    let frameId: number | null = null
-
-    const persistScroll = () => {
-      window.sessionStorage.setItem(storageKey, window.scrollY.toString())
-    }
-
-    const handleScroll = () => {
-      if (frameId !== null) {
-        return
-      }
-
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null
-        persistScroll()
-      })
-    }
-
-    window.addEventListener('scroll', handleScroll, { passive: true })
-
-    return () => {
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId)
-      }
-
-      persistScroll()
-      window.removeEventListener('scroll', handleScroll)
-    }
-  }, [storageKey])
+  usePersistedWindowScroll(storageKey)
 
   useEffect(() => {
     if (!isReady || !storageKey) {
