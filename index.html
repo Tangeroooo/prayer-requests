@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/prayer-requests/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>13TH CROSS 리더십 기도제목</title>
 
     <!-- Open Graph / 썸네일 -->
@@ -35,6 +38,99 @@
           );
         }
       }(window.location))
+    </script>
+    <script type="text/javascript">
+      (function() {
+        var currentBuildId = '__APP_BUILD_ID__';
+        var versionEndpoint = '__APP_VERSION_ENDPOINT__';
+        var cacheParam = '__cv';
+        var forcedReloadKey = 'prayer-requests:forced-build-id';
+
+        var readUrl = function() {
+          try {
+            return new URL(window.location.href);
+          } catch (error) {
+            return null;
+          }
+        };
+
+        var rewriteUrl = function(url) {
+          window.history.replaceState(
+            null,
+            '',
+            url.pathname + url.search + url.hash
+          );
+        };
+
+        var stripCacheParam = function(expectedBuildId) {
+          var url = readUrl();
+          if (!url || !url.searchParams.has(cacheParam)) {
+            return;
+          }
+
+          if (expectedBuildId && url.searchParams.get(cacheParam) !== expectedBuildId) {
+            return;
+          }
+
+          url.searchParams.delete(cacheParam);
+          rewriteUrl(url);
+        };
+
+        var readForcedReloadBuildId = function() {
+          try {
+            return window.sessionStorage.getItem(forcedReloadKey);
+          } catch (error) {
+            return null;
+          }
+        };
+
+        var writeForcedReloadBuildId = function(buildId) {
+          try {
+            window.sessionStorage.setItem(forcedReloadKey, buildId);
+          } catch (error) {
+            // 세션 저장소를 못 써도 새로고침 플로우는 계속 진행한다.
+          }
+        };
+
+        if (!currentBuildId || currentBuildId === 'dev' || !window.fetch) {
+          stripCacheParam();
+          return;
+        }
+
+        window.fetch(versionEndpoint + '?t=' + Date.now(), {
+          cache: 'no-store',
+        })
+          .then(function(response) {
+            if (!response.ok) {
+              throw new Error('Failed to read build metadata');
+            }
+            return response.json();
+          })
+          .then(function(payload) {
+            var latestBuildId = payload && payload.buildId;
+            if (!latestBuildId) {
+              stripCacheParam();
+              return;
+            }
+
+            if (latestBuildId !== currentBuildId && readForcedReloadBuildId() !== latestBuildId) {
+              var nextUrl = readUrl();
+              if (!nextUrl) {
+                return;
+              }
+
+              writeForcedReloadBuildId(latestBuildId);
+              nextUrl.searchParams.set(cacheParam, latestBuildId);
+              window.location.replace(nextUrl.toString());
+              return;
+            }
+
+            stripCacheParam(latestBuildId);
+          })
+          .catch(function() {
+            stripCacheParam();
+          });
+      }());
     </script>
   </head>
   <body>
